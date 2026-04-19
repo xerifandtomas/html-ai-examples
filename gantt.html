@@ -1,0 +1,1765 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gantt-in-a-Box</title>
+  <style>
+    /* ===== CSS Reset & Variables ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary: #1a1a2e;
+      --bg-secondary: #16213e;
+      --bg-card: #0f3460;
+      --bg-input: #1a1a3e;
+      --text-primary: #e0e0e0;
+      --text-secondary: #a0a0c0;
+      --accent: #e94560;
+      --accent-hover: #ff6b81;
+      --success: #2ecc71;
+      --warning: #f39c12;
+      --info: #3498db;
+      --border: #2a2a4a;
+      --row-odd: rgba(15, 52, 96, 0.3);
+      --row-even: rgba(22, 33, 62, 0.3);
+      --shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      --radius: 8px;
+      --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --transition: 0.2s ease;
+      --header-h: 50px;
+      --sidebar-w: 380px;
+      --row-h: 38px;
+      --day-w: 36px;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: var(--font);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow: hidden;
+    }
+
+    /* ===== Layout ===== */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      height: var(--header-h);
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      z-index: 100;
+    }
+
+    header h1 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--info));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .main-content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ===== Buttons ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg-card);
+      color: var(--text-primary);
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all var(--transition);
+      white-space: nowrap;
+    }
+
+    .btn:hover { background: var(--bg-secondary); border-color: var(--accent); }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn-danger { border-color: #c0392b; }
+    .btn-danger:hover { background: #c0392b; border-color: #c0392b; }
+    .btn-sm { padding: 3px 8px; font-size: 0.75rem; }
+    .btn-icon { padding: 4px 8px; font-size: 1rem; }
+
+    /* ===== Sidebar (Task List) ===== */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-width: 300px;
+      background: var(--bg-secondary);
+      border-right: 2px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-card);
+    }
+
+    .sidebar-header h2 { font-size: 0.85rem; font-weight: 600; }
+
+    .task-list-header {
+      display: grid;
+      grid-template-columns: 30px 1fr 80px 80px;
+      gap: 4px;
+      padding: 6px 12px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(0,0,0,0.2);
+    }
+
+    .task-list-container {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .task-row {
+      display: grid;
+      grid-template-columns: 30px 1fr 80px 80px;
+      gap: 4px;
+      align-items: center;
+      padding: 0 12px;
+      height: var(--row-h);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+
+    .task-row:nth-child(odd) { background: var(--row-odd); }
+    .task-row:nth-child(even) { background: var(--row-even); }
+    .task-row:hover { background: rgba(233, 69, 96, 0.1); }
+    .task-row.selected { background: rgba(233, 69, 96, 0.2); border-left: 3px solid var(--accent); }
+
+    .task-row .toggle {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      border-radius: 3px;
+      transition: all var(--transition);
+    }
+
+    .task-row .toggle:hover { background: rgba(255,255,255,0.1); }
+
+    .task-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .task-name .indent { display: inline-block; }
+
+    .task-date {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      text-align: center;
+    }
+
+    /* ===== Gantt Chart Area ===== */
+    .gantt-area {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+    }
+
+    .gantt-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .gantt-header-months {
+      display: flex;
+      height: 20px;
+    }
+
+    .gantt-month-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-align: center;
+      border-right: 1px solid var(--border);
+      padding: 2px 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .gantt-header-days {
+      display: flex;
+      height: 22px;
+    }
+
+    .gantt-day {
+      width: var(--day-w);
+      min-width: var(--day-w);
+      text-align: center;
+      font-size: 0.6rem;
+      color: var(--text-secondary);
+      border-right: 1px solid rgba(255,255,255,0.03);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .gantt-day.weekend { background: rgba(255,255,255,0.02); color: rgba(255,255,255,0.2); }
+    .gantt-day.today { background: rgba(233, 69, 96, 0.2); color: var(--accent); font-weight: 700; }
+
+    .gantt-body { position: relative; }
+
+    .gantt-row {
+      height: var(--row-h);
+      position: relative;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .gantt-row:nth-child(odd) { background: var(--row-odd); }
+    .gantt-row:nth-child(even) { background: var(--row-even); }
+
+    .gantt-bar {
+      position: absolute;
+      top: 6px;
+      height: 26px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: #fff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      transition: filter 0.15s, box-shadow 0.15s;
+      z-index: 2;
+      min-width: 8px;
+    }
+
+    .gantt-bar:hover { filter: brightness(1.2); box-shadow: 0 2px 10px rgba(0,0,0,0.4); }
+    .gantt-bar.parent-bar { border: 2px solid rgba(255,255,255,0.3); }
+
+    .gantt-bar .bar-progress {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      background: rgba(255,255,255,0.15);
+      border-radius: 4px 0 0 4px;
+      pointer-events: none;
+    }
+
+    .gantt-bar .bar-label {
+      position: relative;
+      z-index: 1;
+    }
+
+    .gantt-bar .resize-handle {
+      position: absolute;
+      top: 0;
+      width: 8px;
+      height: 100%;
+      cursor: ew-resize;
+      z-index: 3;
+    }
+
+    .gantt-bar .resize-handle.left { left: 0; }
+    .gantt-bar .resize-handle.right { right: 0; }
+
+    .today-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--accent);
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .today-line::before {
+      content: 'Hoy';
+      position: absolute;
+      top: -18px;
+      left: -12px;
+      font-size: 0.6rem;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    /* ===== Dependency Lines ===== */
+    .dependency-svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .dependency-svg path {
+      fill: none;
+      stroke: var(--warning);
+      stroke-width: 1.5;
+      opacity: 0.6;
+    }
+
+    .dependency-svg marker path {
+      fill: var(--warning);
+      stroke: none;
+    }
+
+    /* ===== Modal ===== */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .modal {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      width: 480px;
+      max-width: 95vw;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow);
+      animation: slideUp 0.25s ease;
+    }
+
+    .modal h3 {
+      font-size: 1rem;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-group input:not([type="checkbox"]):not([type="radio"]),
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      font-family: var(--font);
+      transition: border-color var(--transition);
+    }
+
+    .form-group input:not([type="checkbox"]):not([type="radio"]):focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .form-group textarea { resize: vertical; min-height: 60px; }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .form-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 20px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .progress-bar-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .progress-bar-container input[type="range"] {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      border: none;
+      padding: 0;
+    }
+
+    .progress-bar-container input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .progress-value { font-size: 0.8rem; font-weight: 600; min-width: 35px; text-align: right; }
+
+    /* ===== Color Picker ===== */
+    .color-options {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .color-option {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+
+    .color-option:hover { transform: scale(1.15); }
+    .color-option.selected { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.3); }
+
+    /* ===== Context Menu ===== */
+    .context-menu {
+      position: fixed;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 4px 0;
+      min-width: 180px;
+      box-shadow: var(--shadow);
+      z-index: 2000;
+      animation: fadeIn 0.15s ease;
+    }
+
+    .context-menu-item {
+      padding: 8px 16px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background var(--transition);
+    }
+
+    .context-menu-item:hover { background: rgba(233, 69, 96, 0.15); }
+    .context-menu-separator { height: 1px; background: var(--border); margin: 4px 0; }
+
+    /* ===== Toast Notifications ===== */
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 3000;
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 8px;
+    }
+
+    .toast {
+      padding: 10px 18px;
+      border-radius: var(--radius);
+      font-size: 0.8rem;
+      color: #fff;
+      box-shadow: var(--shadow);
+      animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s;
+      max-width: 300px;
+    }
+
+    .toast.success { background: var(--success); }
+    .toast.error { background: #e74c3c; }
+    .toast.info { background: var(--info); }
+
+    /* ===== Scrollbar ===== */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg-primary); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+    /* ===== Animations ===== */
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+
+    /* ===== Empty State ===== */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      color: var(--text-secondary);
+      text-align: center;
+      height: 100%;
+    }
+
+    .empty-state .icon { font-size: 3rem; margin-bottom: 12px; opacity: 0.4; }
+    .empty-state p { font-size: 0.85rem; margin-bottom: 16px; }
+
+    /* ===== Resize splitter ===== */
+    .splitter {
+      width: 4px;
+      cursor: col-resize;
+      background: var(--border);
+      transition: background var(--transition);
+      flex-shrink: 0;
+    }
+
+    .splitter:hover, .splitter.active { background: var(--accent); }
+
+    /* ===== Tooltip ===== */
+    .gantt-tooltip {
+      position: fixed;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 0.78rem;
+      box-shadow: var(--shadow);
+      z-index: 5000;
+      pointer-events: none;
+      max-width: 260px;
+    }
+
+    .gantt-tooltip .tt-title { font-weight: 700; margin-bottom: 6px; }
+    .gantt-tooltip .tt-row { display: flex; justify-content: space-between; gap: 12px; margin: 2px 0; }
+    .gantt-tooltip .tt-label { color: var(--text-secondary); }
+    /* ===== Mobile / Responsive ===== */
+    @media (max-width: 640px) {
+      :root {
+        --sidebar-w: 100%;
+        --day-w: 28px;
+      }
+
+      header {
+        padding: 0 10px;
+        height: auto;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+      }
+
+      .header-actions {
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+
+      .btn {
+        padding: 4px 8px;
+        font-size: 0.72rem;
+      }
+
+      .main-content {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        width: 100%;
+        min-width: unset;
+        max-height: 40vh;
+        border-right: none;
+        border-bottom: 2px solid var(--border);
+      }
+
+      .splitter {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>&#128202; Gantt-in-a-Box</h1>
+      <div class="header-actions">
+        <button class="btn" id="btn-undo" title="Deshacer">&#8630; Deshacer</button>
+        <button class="btn" id="btn-redo" title="Rehacer">&#8631; Rehacer</button>
+        <button class="btn" id="btn-zoom-out" title="Alejar">&#8722;</button>
+        <button class="btn" id="btn-zoom-in" title="Acercar">&#43;</button>
+        <button class="btn" id="btn-today" title="Ir a hoy">Hoy</button>
+        <button class="btn" id="btn-export" title="Exportar JSON">&#128190; Exportar</button>
+        <button class="btn" id="btn-import" title="Importar JSON">&#128194; Importar</button>
+        <input type="file" id="import-file" accept=".json" style="display:none">
+      </div>
+    </header>
+    <div class="main-content">
+      <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <h2>Tareas</h2>
+          <button class="btn btn-primary btn-sm" id="btn-add-task">&#43; Nueva Tarea</button>
+        </div>
+        <div class="task-list-header">
+          <span></span>
+          <span>Nombre</span>
+          <span style="text-align:center">Inicio</span>
+          <span style="text-align:center">Fin</span>
+        </div>
+        <div class="task-list-container" id="task-list"></div>
+      </div>
+      <div class="splitter" id="splitter"></div>
+      <div class="gantt-area" id="gantt-area">
+        <div class="gantt-header" id="gantt-header">
+          <div class="gantt-header-months" id="gantt-months"></div>
+          <div class="gantt-header-days" id="gantt-days"></div>
+        </div>
+        <div class="gantt-body" id="gantt-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script>
+    /* ============================================================
+       Gantt-in-a-Box — Standalone Gantt Chart Application
+       ============================================================ */
+    (function () {
+      'use strict';
+
+      // ─── Constants ──────────────────────────────────────
+      const STORAGE_KEY = 'gantt-in-a-box-data';
+      const COLORS = [
+        '#e94560', '#3498db', '#2ecc71', '#f39c12', '#9b59b6',
+        '#1abc9c', '#e67e22', '#fd79a8', '#00bcd4', '#8bc34a',
+        '#ff5722', '#607d8b', '#795548', '#f1c40f', '#5c6bc0'
+      ];
+      const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      const DAY_NAMES = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+      const MS_PER_DAY = 86400000;
+
+      // ─── State ──────────────────────────────────────────
+      let tasks = [];
+      let selectedTaskId = null;
+      let dayWidth = 36;
+      let undoStack = [];
+      let redoStack = [];
+      let collapsedIds = new Set();
+
+      // ─── DOM refs ───────────────────────────────────────
+      const $ = (sel) => document.querySelector(sel);
+      const taskListEl = $('#task-list');
+      const ganttArea = $('#gantt-area');
+      const ganttMonths = $('#gantt-months');
+      const ganttDays = $('#gantt-days');
+      const ganttBody = $('#gantt-body');
+      const toastContainer = $('#toast-container');
+
+      // ─── Utility Functions ──────────────────────────────
+      function generateId() {
+        return 'task_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
+      }
+
+      function toDateStr(d) {
+        const dt = new Date(d);
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth() + 1).padStart(2, '0');
+        const day = String(dt.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      }
+
+      function parseDate(str) {
+        const parts = str.split('-');
+        return new Date(+parts[0], +parts[1] - 1, +parts[2]);
+      }
+
+      function daysBetween(a, b) {
+        return Math.round((b - a) / MS_PER_DAY);
+      }
+
+      function addDays(d, n) {
+        const r = new Date(d);
+        r.setDate(r.getDate() + n);
+        return r;
+      }
+
+      function formatDate(str) {
+        if (!str) return '';
+        const d = parseDate(str);
+        return `${d.getDate()}/${d.getMonth() + 1}`;
+      }
+
+      function clamp(v, min, max) {
+        return Math.max(min, Math.min(max, v));
+      }
+
+      // ─── Toast Notifications ────────────────────────────
+      function toast(msg, type = 'info') {
+        const el = document.createElement('div');
+        el.className = `toast ${type}`;
+        el.textContent = msg;
+        toastContainer.appendChild(el);
+        setTimeout(() => el.remove(), 3000);
+      }
+
+      // ─── Persistence ───────────────────────────────────
+      function save() {
+        const data = {
+          tasks: tasks,
+          collapsed: [...collapsedIds]
+        };
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        } catch (e) {
+          toast('Error al guardar datos', 'error');
+        }
+      }
+
+      function load() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const data = JSON.parse(raw);
+            tasks = data.tasks || [];
+            collapsedIds = new Set(data.collapsed || []);
+          }
+        } catch (e) {
+          tasks = [];
+          collapsedIds = new Set();
+        }
+      }
+
+      // ─── Undo / Redo ───────────────────────────────────
+      function snapshot() {
+        undoStack.push(JSON.stringify(tasks));
+        if (undoStack.length > 50) undoStack.shift();
+        redoStack = [];
+      }
+
+      function undo() {
+        if (undoStack.length === 0) return;
+        redoStack.push(JSON.stringify(tasks));
+        tasks = JSON.parse(undoStack.pop());
+        save();
+        render();
+        toast('Acción deshecha', 'info');
+      }
+
+      function redo() {
+        if (redoStack.length === 0) return;
+        undoStack.push(JSON.stringify(tasks));
+        tasks = JSON.parse(redoStack.pop());
+        save();
+        render();
+        toast('Acción rehecha', 'info');
+      }
+
+      // ─── Task Helpers ──────────────────────────────────
+      function getTask(id) {
+        return tasks.find(t => t.id === id);
+      }
+
+      function getChildren(parentId) {
+        return tasks.filter(t => t.parentId === parentId);
+      }
+
+      function getDescendants(id) {
+        const result = [];
+        const children = getChildren(id);
+        for (const c of children) {
+          result.push(c);
+          result.push(...getDescendants(c.id));
+        }
+        return result;
+      }
+
+      function getDepth(task) {
+        let depth = 0;
+        let current = task;
+        while (current.parentId) {
+          depth++;
+          current = getTask(current.parentId);
+          if (!current) break;
+        }
+        return depth;
+      }
+
+      function isParentTask(id) {
+        return tasks.some(t => t.parentId === id);
+      }
+
+      function getFlatVisibleTasks() {
+        const result = [];
+        function traverse(parentId) {
+          const children = tasks.filter(t => t.parentId === parentId).sort((a, b) => a.order - b.order);
+          for (const child of children) {
+            result.push(child);
+            if (!collapsedIds.has(child.id)) {
+              traverse(child.id);
+            }
+          }
+        }
+        traverse(null);
+        return result;
+      }
+
+      function updateParentDates(parentId) {
+        if (!parentId) return;
+        const parent = getTask(parentId);
+        if (!parent) return;
+        const children = getChildren(parentId);
+        if (children.length === 0) return;
+
+        const starts = children.map(c => parseDate(c.startDate));
+        const ends = children.map(c => parseDate(c.endDate));
+        const minStart = new Date(Math.min(...starts));
+        const maxEnd = new Date(Math.max(...ends));
+
+        parent.startDate = toDateStr(minStart);
+        parent.endDate = toDateStr(maxEnd);
+
+        // Update parent progress as average of children
+        const totalProgress = children.reduce((sum, c) => sum + (c.progress || 0), 0);
+        parent.progress = Math.round(totalProgress / children.length);
+
+        updateParentDates(parent.parentId);
+      }
+
+      // ─── Timeline Computation ──────────────────────────
+      function getTimelineRange() {
+        if (tasks.length === 0) {
+          const today = new Date();
+          const start = new Date(today.getFullYear(), today.getMonth(), 1);
+          const end = addDays(start, 60);
+          return { start, end };
+        }
+        const starts = tasks.map(t => parseDate(t.startDate));
+        const ends = tasks.map(t => parseDate(t.endDate));
+        let minDate = new Date(Math.min(...starts));
+        let maxDate = new Date(Math.max(...ends));
+
+        // Add padding
+        minDate = addDays(minDate, -7);
+        maxDate = addDays(maxDate, 14);
+
+        return { start: minDate, end: maxDate };
+      }
+
+      // ─── Render Task List (Sidebar) ────────────────────
+      function renderTaskList() {
+        const visible = getFlatVisibleTasks();
+
+        if (visible.length === 0) {
+          taskListEl.innerHTML = `
+            <div class="empty-state">
+              <div class="icon">&#128203;</div>
+              <p>No hay tareas aún.<br>Haz clic en "+ Nueva Tarea" para comenzar.</p>
+            </div>`;
+          return;
+        }
+
+        let html = '';
+        for (const task of visible) {
+          const depth = getDepth(task);
+          const hasChildren = isParentTask(task.id);
+          const isCollapsed = collapsedIds.has(task.id);
+          const selected = task.id === selectedTaskId ? ' selected' : '';
+
+          const toggleIcon = hasChildren
+            ? (isCollapsed ? '&#9654;' : '&#9660;')
+            : '&nbsp;';
+
+          html += `<div class="task-row${selected}" data-id="${task.id}">
+            <span class="toggle" data-id="${task.id}" ${hasChildren ? '' : 'style="visibility:hidden"'}>${toggleIcon}</span>
+            <span class="task-name"><span class="indent" style="width:${depth * 16}px"></span>${escapeHtml(task.name)}</span>
+            <span class="task-date">${formatDate(task.startDate)}</span>
+            <span class="task-date">${formatDate(task.endDate)}</span>
+          </div>`;
+        }
+
+        taskListEl.innerHTML = html;
+
+        // Event listeners
+        taskListEl.querySelectorAll('.task-row').forEach(row => {
+          row.addEventListener('click', (e) => {
+            if (e.target.closest('.toggle')) return;
+            selectedTaskId = row.dataset.id;
+            renderTaskList();
+          });
+
+          row.addEventListener('dblclick', () => {
+            openEditModal(row.dataset.id);
+          });
+
+          row.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            selectedTaskId = row.dataset.id;
+            showContextMenu(e.clientX, e.clientY, row.dataset.id);
+            renderTaskList();
+          });
+        });
+
+        taskListEl.querySelectorAll('.toggle[data-id]').forEach(toggle => {
+          toggle.addEventListener('click', () => {
+            const id = toggle.dataset.id;
+            if (collapsedIds.has(id)) {
+              collapsedIds.delete(id);
+            } else {
+              collapsedIds.add(id);
+            }
+            save();
+            render();
+          });
+        });
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      // ─── Render Gantt Chart ────────────────────────────
+      function renderGantt() {
+        const range = getTimelineRange();
+        const totalDays = daysBetween(range.start, range.end) + 1;
+        const totalWidth = totalDays * dayWidth;
+
+        // Render month headers
+        let monthHtml = '';
+        let currentMonth = -1;
+        let currentYear = -1;
+        let monthStart = 0;
+        let monthDays = 0;
+
+        for (let i = 0; i <= totalDays; i++) {
+          const day = addDays(range.start, i);
+          const m = day.getMonth();
+          const y = day.getFullYear();
+
+          if (m !== currentMonth || y !== currentYear || i === totalDays) {
+            if (currentMonth !== -1) {
+              monthHtml += `<div class="gantt-month-label" style="width:${monthDays * dayWidth}px">${MONTH_NAMES[currentMonth]} ${currentYear}</div>`;
+            }
+            currentMonth = m;
+            currentYear = y;
+            monthStart = i;
+            monthDays = 0;
+          }
+          monthDays++;
+        }
+        ganttMonths.style.width = totalWidth + 'px';
+        ganttMonths.innerHTML = monthHtml;
+
+        // Render day headers
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        let dayHtml = '';
+
+        for (let i = 0; i < totalDays; i++) {
+          const day = addDays(range.start, i);
+          const dow = day.getDay();
+          const isWeekend = dow === 0 || dow === 6;
+          const isToday = day.getTime() === today.getTime();
+          let cls = 'gantt-day';
+          if (isWeekend) cls += ' weekend';
+          if (isToday) cls += ' today';
+
+          dayHtml += `<div class="${cls}">${day.getDate()}</div>`;
+        }
+        ganttDays.style.width = totalWidth + 'px';
+        ganttDays.innerHTML = dayHtml;
+
+        // Render bars
+        const visible = getFlatVisibleTasks();
+        let bodyHtml = '';
+
+        for (let i = 0; i < visible.length; i++) {
+          const task = visible[i];
+          const taskStart = parseDate(task.startDate);
+          const taskEnd = parseDate(task.endDate);
+          const startOffset = daysBetween(range.start, taskStart);
+          const duration = daysBetween(taskStart, taskEnd) + 1;
+          const left = startOffset * dayWidth;
+          const width = duration * dayWidth;
+          const hasChildren = isParentTask(task.id);
+          const barClass = hasChildren ? 'gantt-bar parent-bar' : 'gantt-bar';
+          const progress = task.progress || 0;
+
+          bodyHtml += `<div class="gantt-row" data-index="${i}">
+            <div class="${barClass}" data-id="${task.id}" style="left:${left}px;width:${width}px;background:${task.color || COLORS[0]};">
+              <div class="bar-progress" style="width:${progress}%"></div>
+              <span class="bar-label">${escapeHtml(task.name)}</span>
+              ${!hasChildren ? '<div class="resize-handle left"></div><div class="resize-handle right"></div>' : ''}
+            </div>
+          </div>`;
+        }
+
+        // Add grid lines for weekends and today
+        bodyHtml += `<svg class="dependency-svg" id="dep-svg" style="width:${totalWidth}px;height:${visible.length * parseInt(getComputedStyle(document.documentElement).getPropertyValue('--row-h'))}px;">
+          <defs>
+            <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <path d="M0,0 L8,3 L0,6 Z" />
+            </marker>
+          </defs>
+        </svg>`;
+
+        ganttBody.innerHTML = bodyHtml;
+        ganttBody.style.width = totalWidth + 'px';
+
+        // Today line
+        const todayOffset = daysBetween(range.start, today);
+        if (todayOffset >= 0 && todayOffset <= totalDays) {
+          const todayLine = document.createElement('div');
+          todayLine.className = 'today-line';
+          todayLine.style.left = (todayOffset * dayWidth + dayWidth / 2) + 'px';
+          ganttBody.appendChild(todayLine);
+        }
+
+        // Draw dependency lines
+        renderDependencies(visible, range);
+
+        // Setup bar interactions
+        setupBarInteractions(visible, range);
+
+        // Bar hover tooltips
+        ganttBody.querySelectorAll('.gantt-bar').forEach(bar => {
+          bar.addEventListener('mouseenter', (e) => showTooltip(e, bar.dataset.id));
+          bar.addEventListener('mouseleave', hideTooltip);
+          bar.addEventListener('dblclick', () => openEditModal(bar.dataset.id));
+          bar.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            selectedTaskId = bar.dataset.id;
+            showContextMenu(e.clientX, e.clientY, bar.dataset.id);
+          });
+        });
+      }
+
+      // ─── Dependency Lines ──────────────────────────────
+      function renderDependencies(visible, range) {
+        const svg = document.getElementById('dep-svg');
+        if (!svg) return;
+
+        const rowH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--row-h'));
+        let paths = '';
+
+        for (let i = 0; i < visible.length; i++) {
+          const task = visible[i];
+          if (!task.dependencies || task.dependencies.length === 0) continue;
+
+          for (const depId of task.dependencies) {
+            const depIndex = visible.findIndex(t => t.id === depId);
+            if (depIndex === -1) continue;
+
+            const depTask = visible[depIndex];
+            const depEnd = parseDate(depTask.endDate);
+            const taskStart = parseDate(task.startDate);
+
+            const x1 = (daysBetween(range.start, depEnd) + 1) * dayWidth;
+            const y1 = depIndex * rowH + rowH / 2;
+            const x2 = daysBetween(range.start, taskStart) * dayWidth;
+            const y2 = i * rowH + rowH / 2;
+
+            const midX = (x1 + x2) / 2;
+
+            paths += `<path d="M${x1},${y1} C${midX},${y1} ${midX},${y2} ${x2},${y2}" marker-end="url(#arrowhead)" />`;
+          }
+        }
+
+        svg.innerHTML = svg.innerHTML + paths;
+      }
+
+      // ─── Bar Drag & Resize ─────────────────────────────
+      function setupBarInteractions(visible, range) {
+        const rowH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--row-h'));
+
+        ganttBody.querySelectorAll('.gantt-bar').forEach(barEl => {
+          const taskId = barEl.dataset.id;
+          const task = getTask(taskId);
+          if (!task || isParentTask(taskId)) return;
+
+          let dragType = null; // 'move', 'resize-left', 'resize-right'
+          let startX, origLeft, origWidth, origStartDate, origEndDate;
+
+          const onMouseDown = (e) => {
+            if (e.target.classList.contains('resize-handle')) {
+              dragType = e.target.classList.contains('left') ? 'resize-left' : 'resize-right';
+            } else {
+              dragType = 'move';
+            }
+
+            snapshot();
+            startX = e.clientX;
+            origLeft = parseInt(barEl.style.left);
+            origWidth = parseInt(barEl.style.width);
+            origStartDate = task.startDate;
+            origEndDate = task.endDate;
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+            e.preventDefault();
+          };
+
+          const onMouseMove = (e) => {
+            const dx = e.clientX - startX;
+            const dayDelta = Math.round(dx / dayWidth);
+
+            if (dragType === 'move') {
+              barEl.style.left = (origLeft + dayDelta * dayWidth) + 'px';
+              task.startDate = toDateStr(addDays(parseDate(origStartDate), dayDelta));
+              task.endDate = toDateStr(addDays(parseDate(origEndDate), dayDelta));
+            } else if (dragType === 'resize-left') {
+              const newLeft = origLeft + dayDelta * dayWidth;
+              const newWidth = origWidth - dayDelta * dayWidth;
+              if (newWidth >= dayWidth) {
+                barEl.style.left = newLeft + 'px';
+                barEl.style.width = newWidth + 'px';
+                task.startDate = toDateStr(addDays(parseDate(origStartDate), dayDelta));
+              }
+            } else if (dragType === 'resize-right') {
+              const newWidth = origWidth + dayDelta * dayWidth;
+              if (newWidth >= dayWidth) {
+                barEl.style.width = newWidth + 'px';
+                task.endDate = toDateStr(addDays(parseDate(origEndDate), dayDelta));
+              }
+            }
+          };
+
+          const onMouseUp = () => {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            updateParentDates(task.parentId);
+            save();
+            render();
+          };
+
+          barEl.addEventListener('mousedown', onMouseDown);
+        });
+      }
+
+      // ─── Tooltip ───────────────────────────────────────
+      let tooltipEl = null;
+
+      function showTooltip(e, taskId) {
+        const task = getTask(taskId);
+        if (!task) return;
+
+        hideTooltip();
+        tooltipEl = document.createElement('div');
+        tooltipEl.className = 'gantt-tooltip';
+
+        const duration = daysBetween(parseDate(task.startDate), parseDate(task.endDate)) + 1;
+
+        tooltipEl.innerHTML = `
+          <div class="tt-title">${escapeHtml(task.name)}</div>
+          <div class="tt-row"><span class="tt-label">Inicio:</span><span>${task.startDate}</span></div>
+          <div class="tt-row"><span class="tt-label">Fin:</span><span>${task.endDate}</span></div>
+          <div class="tt-row"><span class="tt-label">Duración:</span><span>${duration} día${duration !== 1 ? 's' : ''}</span></div>
+          <div class="tt-row"><span class="tt-label">Progreso:</span><span>${task.progress || 0}%</span></div>
+          ${task.description ? `<div style="margin-top:6px;color:var(--text-secondary);font-size:0.72rem">${escapeHtml(task.description)}</div>` : ''}
+        `;
+
+        document.body.appendChild(tooltipEl);
+        positionTooltip(e);
+
+        document.addEventListener('mousemove', positionTooltip);
+      }
+
+      function positionTooltip(e) {
+        if (!tooltipEl) return;
+        tooltipEl.style.left = (e.clientX + 12) + 'px';
+        tooltipEl.style.top = (e.clientY + 12) + 'px';
+      }
+
+      function hideTooltip() {
+        if (tooltipEl) {
+          tooltipEl.remove();
+          tooltipEl = null;
+        }
+        document.removeEventListener('mousemove', positionTooltip);
+      }
+
+      // ─── Context Menu ──────────────────────────────────
+      let contextMenuEl = null;
+
+      function showContextMenu(x, y, taskId) {
+        hideContextMenu();
+
+        contextMenuEl = document.createElement('div');
+        contextMenuEl.className = 'context-menu';
+
+        const items = [
+          { label: '&#9998; Editar', action: () => openEditModal(taskId) },
+          { label: '&#43; Sub-tarea', action: () => openAddModal(taskId) },
+          { separator: true },
+          { label: '&#128203; Duplicar', action: () => duplicateTask(taskId) },
+          { separator: true },
+          { label: '&#128465; Eliminar', action: () => deleteTask(taskId), danger: true }
+        ];
+
+        for (const item of items) {
+          if (item.separator) {
+            const sep = document.createElement('div');
+            sep.className = 'context-menu-separator';
+            contextMenuEl.appendChild(sep);
+          } else {
+            const el = document.createElement('div');
+            el.className = 'context-menu-item';
+            if (item.danger) el.style.color = '#e74c3c';
+            el.innerHTML = item.label;
+            el.addEventListener('click', () => {
+              hideContextMenu();
+              item.action();
+            });
+            contextMenuEl.appendChild(el);
+          }
+        }
+
+        document.body.appendChild(contextMenuEl);
+
+        // Adjust position to stay in viewport
+        const rect = contextMenuEl.getBoundingClientRect();
+        if (x + rect.width > window.innerWidth) x = window.innerWidth - rect.width - 5;
+        if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height - 5;
+        contextMenuEl.style.left = x + 'px';
+        contextMenuEl.style.top = y + 'px';
+
+        setTimeout(() => {
+          document.addEventListener('click', hideContextMenu);
+          document.addEventListener('contextmenu', hideContextMenu);
+        }, 10);
+      }
+
+      function hideContextMenu() {
+        if (contextMenuEl) {
+          contextMenuEl.remove();
+          contextMenuEl = null;
+        }
+        document.removeEventListener('click', hideContextMenu);
+        document.removeEventListener('contextmenu', hideContextMenu);
+      }
+
+      // ─── Task CRUD ─────────────────────────────────────
+      function addTask(data) {
+        snapshot();
+        const siblings = tasks.filter(t => t.parentId === data.parentId);
+        const order = siblings.length > 0 ? Math.max(...siblings.map(s => s.order)) + 1 : 0;
+
+        const task = {
+          id: generateId(),
+          name: data.name || 'Nueva Tarea',
+          startDate: data.startDate || toDateStr(new Date()),
+          endDate: data.endDate || toDateStr(addDays(new Date(), 7)),
+          progress: data.progress || 0,
+          color: data.color || COLORS[tasks.length % COLORS.length],
+          parentId: data.parentId || null,
+          dependencies: data.dependencies || [],
+          description: data.description || '',
+          order: order
+        };
+
+        tasks.push(task);
+        updateParentDates(task.parentId);
+        save();
+        render();
+        toast('Tarea creada', 'success');
+        return task;
+      }
+
+      function updateTask(id, data) {
+        snapshot();
+        const task = getTask(id);
+        if (!task) return;
+        Object.assign(task, data);
+        updateParentDates(task.parentId);
+        save();
+        render();
+        toast('Tarea actualizada', 'success');
+      }
+
+      function deleteTask(id) {
+        snapshot();
+        const task = getTask(id);
+        if (!task) return;
+
+        // Remove descendants
+        const descendants = getDescendants(id);
+        const idsToRemove = new Set([id, ...descendants.map(d => d.id)]);
+
+        tasks = tasks.filter(t => !idsToRemove.has(t.id));
+
+        // Clean up dependencies
+        for (const t of tasks) {
+          if (t.dependencies) {
+            t.dependencies = t.dependencies.filter(d => !idsToRemove.has(d));
+          }
+        }
+
+        if (selectedTaskId && idsToRemove.has(selectedTaskId)) {
+          selectedTaskId = null;
+        }
+
+        updateParentDates(task.parentId);
+        save();
+        render();
+        toast('Tarea eliminada', 'success');
+      }
+
+      function duplicateTask(id) {
+        const task = getTask(id);
+        if (!task) return;
+        addTask({
+          name: task.name + ' (copia)',
+          startDate: task.startDate,
+          endDate: task.endDate,
+          progress: 0,
+          color: task.color,
+          parentId: task.parentId,
+          description: task.description
+        });
+      }
+
+      // ─── Modal: Add / Edit Task ────────────────────────
+      function openAddModal(parentId) {
+        const today = toDateStr(new Date());
+        const nextWeek = toDateStr(addDays(new Date(), 7));
+
+        openTaskModal({
+          title: 'Nueva Tarea',
+          name: '',
+          startDate: today,
+          endDate: nextWeek,
+          progress: 0,
+          color: COLORS[tasks.length % COLORS.length],
+          parentId: parentId || null,
+          dependencies: [],
+          description: '',
+          isNew: true
+        });
+      }
+
+      function openEditModal(id) {
+        const task = getTask(id);
+        if (!task) return;
+
+        openTaskModal({
+          title: 'Editar Tarea',
+          id: task.id,
+          name: task.name,
+          startDate: task.startDate,
+          endDate: task.endDate,
+          progress: task.progress || 0,
+          color: task.color || COLORS[0],
+          parentId: task.parentId,
+          dependencies: task.dependencies || [],
+          description: task.description || '',
+          isNew: false
+        });
+      }
+
+      function openTaskModal(data) {
+        hideContextMenu();
+
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+
+        // Get potential parents (not self or descendants)
+        const potentialParents = data.isNew
+          ? tasks
+          : tasks.filter(t => {
+              if (t.id === data.id) return false;
+              const desc = getDescendants(data.id);
+              return !desc.some(d => d.id === t.id);
+            });
+
+        // Get potential dependencies (not self and not children)
+        const potentialDeps = tasks.filter(t => t.id !== data.id);
+
+        let depCheckboxes = '';
+        for (const t of potentialDeps) {
+          const checked = data.dependencies.includes(t.id) ? 'checked' : '';
+          depCheckboxes += `<label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;padding:2px 0;cursor:pointer">
+            <input type="checkbox" class="dep-checkbox" value="${t.id}" ${checked}>
+            ${escapeHtml(t.name)}
+          </label>`;
+        }
+
+        let colorOptions = '';
+        for (const c of COLORS) {
+          const sel = c === data.color ? ' selected' : '';
+          colorOptions += `<div class="color-option${sel}" data-color="${c}" style="background:${c}"></div>`;
+        }
+
+        let parentOptions = `<option value="">Sin padre (nivel raíz)</option>`;
+        for (const p of potentialParents) {
+          const sel = p.id === data.parentId ? ' selected' : '';
+          const depth = getDepth(p);
+          const indent = '\u00A0\u00A0'.repeat(depth);
+          parentOptions += `<option value="${p.id}"${sel}>${indent}${escapeHtml(p.name)}</option>`;
+        }
+
+        overlay.innerHTML = `
+          <div class="modal">
+            <h3>${data.title}</h3>
+            <div class="form-group">
+              <label>Nombre</label>
+              <input type="text" id="modal-name" value="${escapeHtml(data.name)}" placeholder="Nombre de la tarea">
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Fecha Inicio</label>
+                <input type="date" id="modal-start" value="${data.startDate}">
+              </div>
+              <div class="form-group">
+                <label>Fecha Fin</label>
+                <input type="date" id="modal-end" value="${data.endDate}">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Progreso</label>
+              <div class="progress-bar-container">
+                <input type="range" id="modal-progress" min="0" max="100" value="${data.progress}">
+                <span class="progress-value" id="modal-progress-val">${data.progress}%</span>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Color</label>
+              <div class="color-options" id="modal-colors">${colorOptions}</div>
+            </div>
+            <div class="form-group">
+              <label>Tarea Padre</label>
+              <select id="modal-parent">${parentOptions}</select>
+            </div>
+            ${potentialDeps.length > 0 ? `
+            <div class="form-group">
+              <label>Dependencias</label>
+              <div style="max-height:100px;overflow-y:auto;padding:4px;background:var(--bg-input);border-radius:var(--radius);border:1px solid var(--border)">
+                ${depCheckboxes}
+              </div>
+            </div>` : ''}
+            <div class="form-group">
+              <label>Descripción</label>
+              <textarea id="modal-desc" placeholder="Descripción opcional...">${escapeHtml(data.description)}</textarea>
+            </div>
+            <div class="form-actions">
+              ${!data.isNew ? '<button class="btn btn-danger" id="modal-delete">&#128465; Eliminar</button>' : ''}
+              <button class="btn" id="modal-cancel">Cancelar</button>
+              <button class="btn btn-primary" id="modal-save">&#10003; Guardar</button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        // Focus name field
+        const nameInput = overlay.querySelector('#modal-name');
+        setTimeout(() => nameInput.focus(), 50);
+
+        // Color picker
+        let selectedColor = data.color;
+        overlay.querySelectorAll('.color-option').forEach(el => {
+          el.addEventListener('click', () => {
+            overlay.querySelectorAll('.color-option').forEach(c => c.classList.remove('selected'));
+            el.classList.add('selected');
+            selectedColor = el.dataset.color;
+          });
+        });
+
+        // Progress slider
+        const progressSlider = overlay.querySelector('#modal-progress');
+        const progressVal = overlay.querySelector('#modal-progress-val');
+        progressSlider.addEventListener('input', () => {
+          progressVal.textContent = progressSlider.value + '%';
+        });
+
+        // Close on overlay click
+        overlay.addEventListener('click', (e) => {
+          if (e.target === overlay) overlay.remove();
+        });
+
+        // Cancel
+        overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
+
+        // Delete
+        if (!data.isNew) {
+          overlay.querySelector('#modal-delete').addEventListener('click', () => {
+            overlay.remove();
+            deleteTask(data.id);
+          });
+        }
+
+        // Save
+        overlay.querySelector('#modal-save').addEventListener('click', () => {
+          const name = nameInput.value.trim();
+          if (!name) {
+            toast('El nombre es obligatorio', 'error');
+            nameInput.focus();
+            return;
+          }
+
+          const startDate = overlay.querySelector('#modal-start').value;
+          const endDate = overlay.querySelector('#modal-end').value;
+
+          if (!startDate || !endDate) {
+            toast('Las fechas son obligatorias', 'error');
+            return;
+          }
+
+          if (parseDate(endDate) < parseDate(startDate)) {
+            toast('La fecha fin no puede ser anterior a la de inicio', 'error');
+            return;
+          }
+
+          const deps = [];
+          overlay.querySelectorAll('.dep-checkbox:checked').forEach(cb => deps.push(cb.value));
+
+          const taskData = {
+            name,
+            startDate,
+            endDate,
+            progress: parseInt(progressSlider.value),
+            color: selectedColor,
+            parentId: overlay.querySelector('#modal-parent').value || null,
+            dependencies: deps,
+            description: overlay.querySelector('#modal-desc').value.trim()
+          };
+
+          if (data.isNew) {
+            addTask(taskData);
+          } else {
+            updateTask(data.id, taskData);
+          }
+
+          overlay.remove();
+        });
+
+        // Enter key on name input
+        nameInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') overlay.querySelector('#modal-save').click();
+        });
+
+        // Escape to close
+        overlay.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') overlay.remove();
+        });
+      }
+
+      // ─── Splitter (Resize Sidebar) ─────────────────────
+      function setupSplitter() {
+        const splitter = $('#splitter');
+        const sidebar = $('#sidebar');
+        let startX, startWidth;
+
+        splitter.addEventListener('mousedown', (e) => {
+          startX = e.clientX;
+          startWidth = sidebar.offsetWidth;
+          splitter.classList.add('active');
+
+          const onMove = (e) => {
+            const dx = e.clientX - startX;
+            const newWidth = clamp(startWidth + dx, 200, 700);
+            sidebar.style.width = newWidth + 'px';
+          };
+
+          const onUp = () => {
+            splitter.classList.remove('active');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          };
+
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+          e.preventDefault();
+        });
+      }
+
+      // ─── Zoom ──────────────────────────────────────────
+      function zoomIn() {
+        dayWidth = clamp(dayWidth + 6, 12, 80);
+        document.documentElement.style.setProperty('--day-w', dayWidth + 'px');
+        renderGantt();
+      }
+
+      function zoomOut() {
+        dayWidth = clamp(dayWidth - 6, 12, 80);
+        document.documentElement.style.setProperty('--day-w', dayWidth + 'px');
+        renderGantt();
+      }
+
+      function scrollToToday() {
+        const range = getTimelineRange();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const offset = daysBetween(range.start, today);
+        const scrollPos = offset * dayWidth - ganttArea.clientWidth / 2;
+        ganttArea.scrollLeft = Math.max(0, scrollPos);
+      }
+
+      // ─── Export / Import ───────────────────────────────
+      function exportData() {
+        const data = JSON.stringify({ tasks, version: 1 }, null, 2);
+        const blob = new Blob([data], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'gantt-data-' + toDateStr(new Date()) + '.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('Datos exportados', 'success');
+      }
+
+      function importData(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const data = JSON.parse(e.target.result);
+            if (data.tasks && Array.isArray(data.tasks)) {
+              snapshot();
+              tasks = data.tasks;
+              save();
+              render();
+              toast('Datos importados correctamente', 'success');
+            } else {
+              toast('Formato de archivo inválido', 'error');
+            }
+          } catch (err) {
+            toast('Error al leer el archivo', 'error');
+          }
+        };
+        reader.readAsText(file);
+      }
+
+      // ─── Sync scroll ──────────────────────────────────
+      function setupScrollSync() {
+        const taskListContainer = taskListEl;
+
+        ganttArea.addEventListener('scroll', () => {
+          taskListContainer.scrollTop = ganttArea.scrollTop;
+        });
+
+        taskListContainer.addEventListener('scroll', () => {
+          ganttArea.scrollTop = taskListContainer.scrollTop;
+        });
+      }
+
+      // ─── Main Render ──────────────────────────────────
+      function render() {
+        renderTaskList();
+        renderGantt();
+      }
+
+      // ─── Keyboard Shortcuts ────────────────────────────
+      function setupKeyboard() {
+        document.addEventListener('keydown', (e) => {
+          // Ignore when modal is open or typing in input
+          if (document.querySelector('.modal-overlay')) return;
+          if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+          if (e.ctrlKey || e.metaKey) {
+            if (e.key === 'z') {
+              e.preventDefault();
+              if (e.shiftKey) redo(); else undo();
+            }
+            if (e.key === 'y') { e.preventDefault(); redo(); }
+          }
+
+          if (e.key === 'Delete' && selectedTaskId) {
+            deleteTask(selectedTaskId);
+          }
+
+          if (e.key === '+' || e.key === '=') zoomIn();
+          if (e.key === '-') zoomOut();
+        });
+      }
+
+      // ─── Init ──────────────────────────────────────────
+      function init() {
+        load();
+        render();
+        setupSplitter();
+        setupScrollSync();
+        setupKeyboard();
+
+        // Button events
+        $('#btn-add-task').addEventListener('click', () => openAddModal(null));
+        $('#btn-undo').addEventListener('click', undo);
+        $('#btn-redo').addEventListener('click', redo);
+        $('#btn-zoom-in').addEventListener('click', zoomIn);
+        $('#btn-zoom-out').addEventListener('click', zoomOut);
+        $('#btn-today').addEventListener('click', scrollToToday);
+        $('#btn-export').addEventListener('click', exportData);
+        $('#btn-import').addEventListener('click', () => $('#import-file').click());
+        $('#import-file').addEventListener('change', (e) => {
+          if (e.target.files[0]) {
+            importData(e.target.files[0]);
+            e.target.value = '';
+          }
+        });
+
+        // Scroll to today on initial load
+        setTimeout(scrollToToday, 100);
+      }
+
+      // Boot
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
+</body>
+</html>
