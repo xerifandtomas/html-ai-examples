@@ -224,6 +224,7 @@
       padding: 2px 4px;
       white-space: nowrap;
       overflow: hidden;
+      flex-shrink: 0;
     }
 
     .gantt-header-days {
@@ -1000,6 +1001,7 @@
           }
           monthDays++;
         }
+        ganttMonths.style.width = totalWidth + 'px';
         ganttMonths.innerHTML = monthHtml;
 
         // Render day headers
@@ -1018,6 +1020,7 @@
 
           dayHtml += `<div class="${cls}">${day.getDate()}</div>`;
         }
+        ganttDays.style.width = totalWidth + 'px';
         ganttDays.innerHTML = dayHtml;
 
         // Render bars
