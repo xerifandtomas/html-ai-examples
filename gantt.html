@@ -396,7 +396,7 @@
       letter-spacing: 0.5px;
     }
 
-    .form-group input,
+    .form-group input:not([type="checkbox"]):not([type="radio"]),
     .form-group select,
     .form-group textarea {
       width: 100%;
@@ -410,7 +410,7 @@
       transition: border-color var(--transition);
     }
 
-    .form-group input:focus,
+    .form-group input:not([type="checkbox"]):not([type="radio"]):focus,
     .form-group select:focus,
     .form-group textarea:focus {
       outline: none;
@@ -586,6 +586,48 @@
     .gantt-tooltip .tt-title { font-weight: 700; margin-bottom: 6px; }
     .gantt-tooltip .tt-row { display: flex; justify-content: space-between; gap: 12px; margin: 2px 0; }
     .gantt-tooltip .tt-label { color: var(--text-secondary); }
+    /* ===== Mobile / Responsive ===== */
+    @media (max-width: 640px) {
+      :root {
+        --sidebar-w: 100%;
+        --day-w: 28px;
+      }
+
+      header {
+        padding: 0 10px;
+        height: auto;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+      }
+
+      .header-actions {
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+
+      .btn {
+        padding: 4px 8px;
+        font-size: 0.72rem;
+      }
+
+      .main-content {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        width: 100%;
+        min-width: unset;
+        max-height: 40vh;
+        border-right: none;
+        border-bottom: 2px solid var(--border);
+      }
+
+      .splitter {
+        display: none;
+      }
+    }
   </style>
 </head>
 <body>
@@ -641,8 +683,8 @@
       const STORAGE_KEY = 'gantt-in-a-box-data';
       const COLORS = [
         '#e94560', '#3498db', '#2ecc71', '#f39c12', '#9b59b6',
-        '#1abc9c', '#e67e22', '#e74c3c', '#00bcd4', '#8bc34a',
-        '#ff5722', '#607d8b', '#795548', '#ff9800', '#4caf50'
+        '#1abc9c', '#e67e22', '#fd79a8', '#00bcd4', '#8bc34a',
+        '#ff5722', '#607d8b', '#795548', '#f1c40f', '#5c6bc0'
       ];
       const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
       const DAY_NAMES = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
