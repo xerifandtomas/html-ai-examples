@@ -938,18 +938,21 @@
         // Render month headers
         let monthHtml = '';
         let currentMonth = -1;
+        let currentYear = -1;
         let monthStart = 0;
         let monthDays = 0;
 
         for (let i = 0; i <= totalDays; i++) {
           const day = addDays(range.start, i);
           const m = day.getMonth();
+          const y = day.getFullYear();
 
-          if (m !== currentMonth || i === totalDays) {
+          if (m !== currentMonth || y !== currentYear || i === totalDays) {
             if (currentMonth !== -1) {
-              monthHtml += `<div class="gantt-month-label" style="width:${monthDays * dayWidth}px">${MONTH_NAMES[currentMonth]} ${addDays(range.start, monthStart).getFullYear()}</div>`;
+              monthHtml += `<div class="gantt-month-label" style="width:${monthDays * dayWidth}px">${MONTH_NAMES[currentMonth]} ${currentYear}</div>`;
             }
             currentMonth = m;
+            currentYear = y;
             monthStart = i;
             monthDays = 0;
           }
