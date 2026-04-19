@@ -863,7 +863,7 @@
           taskListEl.innerHTML = `
             <div class="empty-state">
               <div class="icon">&#128203;</div>
-              <p>No hay tareas a&uacute;n.<br>Haz clic en "+ Nueva Tarea" para comenzar.</p>
+              <p>No hay tareas aún.<br>Haz clic en "+ Nueva Tarea" para comenzar.</p>
             </div>`;
           return;
         }
@@ -1159,7 +1159,7 @@
           <div class="tt-title">${escapeHtml(task.name)}</div>
           <div class="tt-row"><span class="tt-label">Inicio:</span><span>${task.startDate}</span></div>
           <div class="tt-row"><span class="tt-label">Fin:</span><span>${task.endDate}</span></div>
-          <div class="tt-row"><span class="tt-label">Duración:</span><span>${duration} día${duration > 1 ? 's' : ''}</span></div>
+          <div class="tt-row"><span class="tt-label">Duración:</span><span>${duration} día${duration !== 1 ? 's' : ''}</span></div>
           <div class="tt-row"><span class="tt-label">Progreso:</span><span>${task.progress || 0}%</span></div>
           ${task.description ? `<div style="margin-top:6px;color:var(--text-secondary);font-size:0.72rem">${escapeHtml(task.description)}</div>` : ''}
         `;
