@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
-const { initDatabase } = require('./database');
+const { initDatabase } = require('./repositories');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -44,5 +44,12 @@ app.get('*', apiLimiter, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-initDatabase();
-app.listen(PORT, () => console.log(`Gantt SaaS running on port ${PORT}`));
+// Initialise schema then start HTTP server
+initDatabase()
+  .then(() => {
+    app.listen(PORT, () => console.log(`Gantt SaaS running on port ${PORT}`));
+  })
+  .catch((err) => {
+    console.error('Failed to initialise database:', err);
+    process.exit(1);
+  });

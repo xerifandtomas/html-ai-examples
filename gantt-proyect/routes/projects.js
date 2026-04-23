@@ -1,45 +1,30 @@
 const express = require('express');
-const { getDb } = require('../database');
+const { getRepos } = require('../repositories');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(requireAuth);
 
 // GET /api/projects
-router.get('/', (req, res) => {
-  const db = getDb();
+router.get('/', async (req, res) => {
   try {
-    let projects;
-    const cols = `
-        SELECT p.*, t.name AS team_name,
-               u.username AS created_by_name,
-               (SELECT COUNT(*) FROM tasks WHERE project_id = p.id) AS task_count,
-               COALESCE((SELECT AVG(progress) FROM tasks WHERE project_id = p.id), 0) AS avg_progress`;
+    const { projects, users } = getRepos();
+    let teamId;
     if (req.user.role === 'admin') {
-      projects = db.prepare(`${cols}
-        FROM projects p
-        LEFT JOIN teams t ON t.id = p.team_id
-        LEFT JOIN users u ON u.id = p.created_by
-        ORDER BY p.created_at DESC
-      `).all();
+      teamId = null; // repo returns all projects when teamId is null
     } else if (req.user.team_id) {
-      projects = db.prepare(`${cols}
-        FROM projects p
-        LEFT JOIN teams t ON t.id = p.team_id
-        LEFT JOIN users u ON u.id = p.created_by
-        WHERE p.team_id = ?
-        ORDER BY p.created_at DESC
-      `).all(req.user.team_id);
+      teamId = req.user.team_id;
     } else {
-      projects = [];
+      return res.json([]);
     }
-    return res.json(projects);
+    return res.json(await projects.findAll(teamId));
   } catch (err) {
-    return res.status(500).json({ error: err.message });}
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/projects
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   if (!['admin', 'team_leader'].includes(req.user.role)) {
     return res.status(403).json({ error: 'Insufficient permissions' });
   }
@@ -49,63 +34,48 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'name, start_date, and end_date are required' });
   }
 
-  const db = getDb();
   try {
+    const { projects, users } = getRepos();
     // Always read team_id fresh from DB in case JWT is stale after team creation
-    const freshUser = db.prepare('SELECT team_id FROM users WHERE id = ?').get(req.user.id);
+    const freshUser = await users.findById(req.user.id);
     const freshTeamId = freshUser ? freshUser.team_id : req.user.team_id;
     const resolvedTeamId = req.user.role === 'admin' ? (team_id || freshTeamId) : freshTeamId;
     if (!resolvedTeamId) {
       return res.status(400).json({ error: 'Team association required. Join or create a team first.' });
     }
 
-    const result = db.prepare(`
-      INSERT INTO projects (name, description, start_date, end_date, team_id, created_by)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(name, description || '', start_date, end_date, resolvedTeamId, req.user.id);
-
-    const project = db.prepare(`
-      SELECT p.*, t.name AS team_name, u.username AS created_by_name
-      FROM projects p
-      LEFT JOIN teams t ON t.id = p.team_id
-      LEFT JOIN users u ON u.id = p.created_by
-      WHERE p.id = ?
-    `).get(result.lastInsertRowid);
-
+    const project = await projects.create({
+      name, description, start_date, end_date,
+      team_id: resolvedTeamId,
+      created_by: req.user.id,
+    });
     return res.status(201).json(project);
   } catch (err) {
-    return res.status(500).json({ error: err.message });}
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // GET /api/projects/:id
-router.get('/:id', (req, res) => {
-  const db = getDb();
+router.get('/:id', async (req, res) => {
   try {
-    const project = db.prepare(`
-      SELECT p.*, t.name AS team_name, u.username AS created_by_name,
-             (SELECT COUNT(*) FROM tasks WHERE project_id = p.id) AS task_count
-      FROM projects p
-      LEFT JOIN teams t ON t.id = p.team_id
-      LEFT JOIN users u ON u.id = p.created_by
-      WHERE p.id = ?
-    `).get(req.params.id);
-
+    const { projects } = getRepos();
+    const project = await projects.findById(req.params.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
     if (req.user.role !== 'admin' && project.team_id !== req.user.team_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
-
     return res.json(project);
   } catch (err) {
-    return res.status(500).json({ error: err.message });}
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // PUT /api/projects/:id
-router.put('/:id', (req, res) => {
-  const db = getDb();
+router.put('/:id', async (req, res) => {
   try {
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+    const { projects } = getRepos();
+    const project = await projects.findById(req.params.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
     if (req.user.role !== 'admin' && project.team_id !== req.user.team_id) {
@@ -116,82 +86,58 @@ router.put('/:id', (req, res) => {
     }
 
     const { name, description, start_date, end_date, status } = req.body;
-    db.prepare(`
-      UPDATE projects SET
-        name = COALESCE(?, name),
-        description = COALESCE(?, description),
-        start_date = COALESCE(?, start_date),
-        end_date = COALESCE(?, end_date),
-        status = COALESCE(?, status)
-      WHERE id = ?
-    `).run(name, description, start_date, end_date, status, req.params.id);
-
-    const updated = db.prepare(`
-      SELECT p.*, t.name AS team_name, u.username AS created_by_name
-      FROM projects p
-      LEFT JOIN teams t ON t.id = p.team_id
-      LEFT JOIN users u ON u.id = p.created_by
-      WHERE p.id = ?
-    `).get(req.params.id);
-
+    const updated = await projects.update(req.params.id, { name, description, start_date, end_date, status });
     return res.json(updated);
   } catch (err) {
-    return res.status(500).json({ error: err.message });}
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // DELETE /api/projects/:id
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   if (!['admin', 'team_leader'].includes(req.user.role)) {
     return res.status(403).json({ error: 'Insufficient permissions' });
   }
 
-  const db = getDb();
   try {
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+    const { projects } = getRepos();
+    const project = await projects.findById(req.params.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
     if (req.user.role !== 'admin' && project.team_id !== req.user.team_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    db.transaction(() => {
-      db.prepare('DELETE FROM tasks WHERE project_id = ?').run(req.params.id);
-      db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
-    })();
+    await projects.delete(req.params.id);
     return res.json({ message: 'Project deleted' });
   } catch (err) {
-    return res.status(500).json({ error: err.message });}
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // GET /api/projects/:id/tasks
-router.get('/:id/tasks', (req, res) => {
-  const db = getDb();
+router.get('/:id/tasks', async (req, res) => {
   try {
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+    const { projects } = getRepos();
+    const project = await projects.findById(req.params.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
     if (req.user.role !== 'admin' && project.team_id !== req.user.team_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const tasks = db.prepare(`
-      SELECT t.*, u.username AS assigned_to_name, u.email AS assigned_to_email
-      FROM tasks t
-      LEFT JOIN users u ON u.id = t.assigned_to
-      WHERE t.project_id = ?
-      ORDER BY t.sort_order ASC, t.id ASC
-    `).all(req.params.id);
-
+    const tasks = await projects.findTasksByProject(req.params.id);
     return res.json(tasks);
   } catch (err) {
-    return res.status(500).json({ error: err.message });}
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/projects/:id/tasks
-router.post('/:id/tasks', (req, res) => {
-  const db = getDb();
+router.post('/:id/tasks', async (req, res) => {
   try {
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+    const { projects } = getRepos();
+    const project = await projects.findById(req.params.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
     if (req.user.role !== 'admin' && project.team_id !== req.user.team_id) {
@@ -206,47 +152,32 @@ router.post('/:id/tasks', (req, res) => {
       return res.status(400).json({ error: 'name, start_date, and end_date are required' });
     }
 
-    const result = db.prepare(`
-      INSERT INTO tasks (project_id, name, description, start_date, end_date, progress, color, parent_id, assigned_to, created_by, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      req.params.id,
-      name,
-      description || '',
-      start_date,
-      end_date,
-      progress || 0,
-      color || '#e94560',
-      parent_id || null,
-      assigned_to || null,
-      req.user.id,
-      sort_order || 0
-    );
-
-    const task = db.prepare(`
-      SELECT t.*, u.username AS assigned_to_name
-      FROM tasks t
-      LEFT JOIN users u ON u.id = t.assigned_to
-      WHERE t.id = ?
-    `).get(result.lastInsertRowid);
-
+    const task = await projects.createTask({
+      project_id: req.params.id,
+      name, description, start_date, end_date, progress, color,
+      parent_id:   parent_id   ?? null,
+      assigned_to: assigned_to ?? null,
+      created_by:  req.user.id,
+      sort_order,
+    });
     return res.status(201).json(task);
   } catch (err) {
-    return res.status(500).json({ error: err.message });}
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // PUT /api/projects/:id/tasks/:taskId
-router.put('/:id/tasks/:taskId', (req, res) => {
-  const db = getDb();
+router.put('/:id/tasks/:taskId', async (req, res) => {
   try {
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+    const { projects } = getRepos();
+    const project = await projects.findById(req.params.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
     if (req.user.role !== 'admin' && project.team_id !== req.user.team_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND project_id = ?').get(req.params.taskId, req.params.id);
+    const task = await projects.findTaskById(req.params.taskId, req.params.id);
     if (!task) return res.status(404).json({ error: 'Task not found' });
 
     // Members can only update progress on tasks assigned to them
@@ -255,53 +186,33 @@ router.put('/:id/tasks/:taskId', (req, res) => {
     }
 
     const { name, description, start_date, end_date, progress, color, parent_id, assigned_to, status, sort_order } = req.body;
-
-    db.prepare(`
-      UPDATE tasks SET
-        name = COALESCE(?, name),
-        description = COALESCE(?, description),
-        start_date = COALESCE(?, start_date),
-        end_date = COALESCE(?, end_date),
-        progress = COALESCE(?, progress),
-        color = COALESCE(?, color),
-        parent_id = COALESCE(?, parent_id),
-        assigned_to = COALESCE(?, assigned_to),
-        status = COALESCE(?, status),
-        sort_order = COALESCE(?, sort_order)
-      WHERE id = ?
-    `).run(name, description, start_date, end_date, progress, color, parent_id, assigned_to, status, sort_order, req.params.taskId);
-
-    const updated = db.prepare(`
-      SELECT t.*, u.username AS assigned_to_name
-      FROM tasks t
-      LEFT JOIN users u ON u.id = t.assigned_to
-      WHERE t.id = ?
-    `).get(req.params.taskId);
-
+    const updated = await projects.updateTask(req.params.taskId, {
+      name, description, start_date, end_date, progress, color,
+      parent_id, assigned_to, status, sort_order,
+    });
     return res.json(updated);
   } catch (err) {
-    return res.status(500).json({ error: err.message });}
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // DELETE /api/projects/:id/tasks/:taskId
-router.delete('/:id/tasks/:taskId', (req, res) => {
+router.delete('/:id/tasks/:taskId', async (req, res) => {
   if (req.user.role === 'member') {
     return res.status(403).json({ error: 'Insufficient permissions' });
   }
 
-  const db = getDb();
   try {
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND project_id = ?').get(req.params.taskId, req.params.id);
+    const { projects } = getRepos();
+    const task = await projects.findTaskById(req.params.taskId, req.params.id);
     if (!task) return res.status(404).json({ error: 'Task not found' });
 
-    // Delete child tasks and parent atomically
-    db.transaction(() => {
-      db.prepare('DELETE FROM tasks WHERE parent_id = ?').run(req.params.taskId);
-      db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.taskId);
-    })();
+    await projects.deleteTask(req.params.taskId);
     return res.json({ message: 'Task deleted' });
   } catch (err) {
-    return res.status(500).json({ error: err.message });}
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
+
