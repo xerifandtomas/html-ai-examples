@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  gantt:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - gantt_data:/app/data
+    environment:
+      - NODE_ENV=production
+      - JWT_SECRET=change_this_secret_in_production
+      - DATABASE_PATH=/app/data/gantt.db
+    restart: unless-stopped
+
+volumes:
+  gantt_data:

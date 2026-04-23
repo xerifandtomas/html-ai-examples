@@ -1,0 +1,1716 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gantt SaaS — App</title>
+  <style>
+    :root {
+      --bg-primary: #1a1a2e;
+      --bg-secondary: #16213e;
+      --bg-card: #0f3460;
+      --bg-input: #1a1a3e;
+      --text-primary: #e0e0e0;
+      --text-secondary: #a0a0c0;
+      --accent: #e94560;
+      --accent-hover: #ff6b81;
+      --success: #2ecc71;
+      --warning: #f39c12;
+      --info: #3498db;
+      --border: #2a2a4a;
+      --radius: 8px;
+      --transition: 0.2s ease;
+      --sidebar-width: 220px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      overflow-x: hidden;
+    }
+
+    /* ─── SIDEBAR ─── */
+    #sidebar {
+      width: var(--sidebar-width);
+      min-height: 100vh;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0; left: 0;
+      z-index: 100;
+      transition: transform var(--transition);
+    }
+
+    .sidebar-brand {
+      padding: 1.5rem 1rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-brand h2 {
+      font-size: 1.3rem;
+      font-weight: 700;
+    }
+
+    .sidebar-brand h2 span { color: var(--accent); }
+
+    .sidebar-brand p {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-top: 0.2rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    nav { flex: 1; padding: 1rem 0; }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1.2rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: var(--transition);
+      font-size: 0.92rem;
+      border-left: 3px solid transparent;
+      user-select: none;
+    }
+
+    .nav-item:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
+
+    .nav-item.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      background: rgba(233,69,96,0.08);
+    }
+
+    .nav-icon { font-size: 1.1rem; width: 20px; text-align: center; }
+
+    .sidebar-footer {
+      padding: 1rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .btn-logout {
+      width: 100%;
+      padding: 0.6rem;
+      background: rgba(233,69,96,0.1);
+      color: var(--accent);
+      border: 1px solid rgba(233,69,96,0.3);
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 0.87rem;
+      font-weight: 500;
+      transition: var(--transition);
+    }
+
+    .btn-logout:hover { background: rgba(233,69,96,0.2); }
+
+    /* ─── MAIN CONTENT ─── */
+    #main {
+      margin-left: var(--sidebar-width);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-secondary);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .topbar h1 { font-size: 1.2rem; font-weight: 600; }
+
+    #menu-toggle {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      font-size: 1.4rem;
+      cursor: pointer;
+      padding: 0.2rem 0.5rem;
+    }
+
+    .content { padding: 1.5rem; flex: 1; }
+
+    /* ─── SECTION VISIBILITY ─── */
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* ─── CARDS / GRID ─── */
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      transition: var(--transition);
+      cursor: pointer;
+    }
+
+    .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-title { font-size: 1rem; font-weight: 600; }
+
+    .badge {
+      padding: 0.2rem 0.6rem;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge-active { background: rgba(46,204,113,0.15); color: var(--success); }
+    .badge-completed { background: rgba(52,152,219,0.15); color: var(--info); }
+    .badge-archived { background: rgba(160,160,192,0.15); color: var(--text-secondary); }
+
+    .card-meta {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.6rem;
+    }
+
+    .progress-bar {
+      height: 5px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 0.5rem;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+
+    /* ─── BUTTONS ─── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.6rem 1.2rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .btn:hover { background: var(--accent-hover); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover { background: rgba(255,255,255,0.08); }
+
+    .btn-danger {
+      background: rgba(233,69,96,0.15);
+      color: var(--accent);
+      border: 1px solid rgba(233,69,96,0.3);
+    }
+
+    .btn-danger:hover { background: rgba(233,69,96,0.25); }
+
+    .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
+
+    /* ─── SECTION HEADER ─── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .section-header h2 { font-size: 1.3rem; font-weight: 600; }
+
+    /* ─── MODAL ─── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--transition);
+    }
+
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+    .modal {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+      width: 100%;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow-y: auto;
+      transform: scale(0.95);
+      transition: transform var(--transition);
+    }
+
+    .modal-overlay.open .modal { transform: scale(1); }
+
+    .modal-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 1.4rem;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0.2rem;
+      transition: var(--transition);
+    }
+
+    .modal-close:hover { color: var(--text-primary); }
+
+    .form-group { margin-bottom: 1rem; }
+
+    label {
+      display: block;
+      font-size: 0.83rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.35rem;
+      font-weight: 500;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 0.65rem 0.9rem;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-size: 0.92rem;
+      transition: var(--transition);
+      outline: none;
+      font-family: inherit;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(233,69,96,0.15);
+    }
+
+    textarea { resize: vertical; min-height: 70px; }
+    select option { background: var(--bg-input); }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+    .modal-actions {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+      margin-top: 1.25rem;
+    }
+
+    /* ─── TOAST ─── */
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      padding: 0.85rem 1.2rem;
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      font-weight: 500;
+      z-index: 9999;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.3s ease;
+      max-width: 340px;
+      pointer-events: none;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    #toast.success { background: rgba(46,204,113,0.9); color: #fff; }
+    #toast.error { background: rgba(233,69,96,0.9); color: #fff; }
+    #toast.info { background: rgba(52,152,219,0.9); color: #fff; }
+
+    /* ─── TABLE ─── */
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    th, td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* ─── GANTT ─── */
+    #gantt-section { display: none; }
+    #gantt-section.active { display: flex; flex-direction: column; height: calc(100vh - 60px); }
+
+    .gantt-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-secondary);
+      flex-wrap: wrap;
+    }
+
+    .gantt-toolbar .project-name {
+      font-size: 1rem;
+      font-weight: 600;
+      flex: 1;
+    }
+
+    .gantt-container {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      overflow: hidden;
+    }
+
+    .gantt-left {
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .gantt-left-header {
+      padding: 0.6rem 1rem;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      height: 44px;
+      display: flex;
+      align-items: center;
+    }
+
+    .gantt-tasks-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .gantt-task-row {
+      display: flex;
+      align-items: center;
+      padding: 0 0.75rem;
+      height: 38px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.85rem;
+      gap: 0.5rem;
+      cursor: pointer;
+      transition: var(--transition);
+      position: relative;
+    }
+
+    .gantt-task-row:hover { background: rgba(255,255,255,0.04); }
+    .gantt-task-row.selected { background: rgba(233,69,96,0.08); }
+
+    .task-indent { padding-left: 1.5rem; }
+
+    .task-color-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .task-label {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .task-progress-text {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    .gantt-right {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .gantt-timeline-header {
+      height: 44px;
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-card);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .gantt-timeline-header-scroll {
+      display: flex;
+      height: 100%;
+    }
+
+    .gantt-day-cell {
+      flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      user-select: none;
+    }
+
+    .gantt-day-cell.today {
+      background: rgba(233,69,96,0.15);
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .gantt-day-cell.weekend { background: rgba(255,255,255,0.02); }
+
+    .gantt-chart-body {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+    }
+
+    .gantt-chart-scroll {
+      position: relative;
+    }
+
+    .gantt-chart-row {
+      display: flex;
+      align-items: center;
+      height: 38px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+
+    .gantt-cell {
+      flex-shrink: 0;
+      height: 100%;
+      border-right: 1px solid rgba(42,42,74,0.5);
+    }
+
+    .gantt-cell.today { background: rgba(233,69,96,0.06); }
+    .gantt-cell.weekend { background: rgba(255,255,255,0.01); }
+
+    .gantt-bar {
+      position: absolute;
+      height: 22px;
+      border-radius: 4px;
+      top: 8px;
+      display: flex;
+      align-items: center;
+      padding: 0 0.5rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      cursor: pointer;
+      transition: filter var(--transition);
+      z-index: 2;
+    }
+
+    .gantt-bar:hover { filter: brightness(1.2); }
+
+    .gantt-bar-inner {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      background: rgba(0,0,0,0.2);
+      border-radius: 4px 0 0 4px;
+      pointer-events: none;
+    }
+
+    .gantt-bar-label {
+      position: relative;
+      z-index: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+    }
+
+    .gantt-today-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--accent);
+      opacity: 0.6;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    /* ─── PROFILE SECTION ─── */
+    .profile-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      max-width: 500px;
+    }
+
+    .profile-info { margin-bottom: 1.5rem; }
+
+    .profile-info p {
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+    .profile-info p strong { color: var(--text-primary); margin-left: 0.3rem; }
+
+    .role-badge {
+      display: inline-block;
+      padding: 0.2rem 0.7rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .role-admin { background: rgba(233,69,96,0.15); color: var(--accent); }
+    .role-team_leader { background: rgba(243,156,18,0.15); color: var(--warning); }
+    .role-member { background: rgba(52,152,219,0.15); color: var(--info); }
+
+    /* ─── EMPTY STATE ─── */
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--text-secondary);
+    }
+
+    .empty-state .icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
+    .empty-state h3 { font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--text-primary); }
+    .empty-state p { font-size: 0.9rem; max-width: 320px; margin: 0 auto 1.5rem; }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 768px) {
+      #sidebar {
+        transform: translateX(-100%);
+      }
+
+      #sidebar.open {
+        transform: translateX(0);
+        box-shadow: 4px 0 20px rgba(0,0,0,0.5);
+      }
+
+      #main { margin-left: 0; }
+
+      #menu-toggle { display: block; }
+
+      .form-row { grid-template-columns: 1fr; }
+
+      .gantt-container { grid-template-columns: 180px 1fr; }
+
+      .gantt-left-header, .gantt-task-row { font-size: 0.78rem; }
+    }
+
+    /* ─── SIDEBAR OVERLAY ─── */
+    #sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 99;
+    }
+
+    #sidebar-overlay.open { display: block; }
+
+    /* ─── COLOR PICKER ─── */
+    .color-row {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.4rem;
+    }
+
+    .color-swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: var(--transition);
+    }
+
+    .color-swatch.selected, .color-swatch:hover {
+      border-color: #fff;
+      transform: scale(1.2);
+    }
+
+    /* ─── NO TEAM BANNER ─── */
+    .banner {
+      background: rgba(243,156,18,0.1);
+      border: 1px solid rgba(243,156,18,0.3);
+      color: var(--warning);
+      padding: 0.85rem 1.2rem;
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar overlay (mobile) -->
+  <div id="sidebar-overlay"></div>
+
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div class="sidebar-brand">
+      <h2>Gantt<span>SaaS</span></h2>
+      <p id="user-label">Cargando...</p>
+    </div>
+    <nav>
+      <div class="nav-item active" data-section="dashboard">
+        <span class="nav-icon">📊</span> Dashboard
+      </div>
+      <div class="nav-item" data-section="gantt-section" id="nav-gantt" style="display:none">
+        <span class="nav-icon">📅</span> Gantt
+      </div>
+      <div class="nav-item" data-section="team-section" id="nav-team">
+        <span class="nav-icon">👥</span> Equipo
+      </div>
+      <div class="nav-item" data-section="profile-section">
+        <span class="nav-icon">👤</span> Perfil
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="btn-logout" id="logout-btn">Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main id="main">
+    <header class="topbar">
+      <button id="menu-toggle">☰</button>
+      <h1 id="topbar-title">Dashboard</h1>
+      <div style="width:32px"></div>
+    </header>
+
+    <div class="content">
+
+      <!-- ─── DASHBOARD ─── -->
+      <section id="dashboard" class="section active">
+        <div class="section-header">
+          <h2>Proyectos</h2>
+          <button class="btn" id="new-project-btn" style="display:none">+ Nuevo proyecto</button>
+        </div>
+        <div id="no-team-banner" class="banner" style="display:none">
+          ⚠️ Aún no perteneces a ningún equipo. Pide a tu líder que te agregue, o crea uno en la sección <strong>Equipo</strong>.
+        </div>
+        <div id="projects-grid" class="grid">
+          <div class="empty-state" style="grid-column:1/-1">
+            <div class="loading-spinner"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── GANTT ─── -->
+      <section id="gantt-section" class="section">
+        <!-- dynamically populated -->
+      </section>
+
+      <!-- ─── TEAM ─── -->
+      <section id="team-section" class="section">
+        <div class="section-header">
+          <h2>Mi Equipo</h2>
+          <button class="btn" id="new-team-btn" style="display:none">+ Crear equipo</button>
+        </div>
+        <div id="team-content">
+          <div class="empty-state">
+            <div class="loading-spinner"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── PROFILE ─── -->
+      <section id="profile-section" class="section">
+        <div class="section-header"><h2>Perfil</h2></div>
+        <div class="profile-card" id="profile-info-card">
+          <div class="profile-info" id="profile-data"></div>
+          <h3 style="font-size:0.95rem; margin-bottom:1rem;">Cambiar contraseña</h3>
+          <form id="password-form">
+            <div class="form-group">
+              <label>Contraseña actual</label>
+              <input type="password" id="pw-current" placeholder="Contraseña actual">
+            </div>
+            <div class="form-group">
+              <label>Nueva contraseña</label>
+              <input type="password" id="pw-new" placeholder="Mínimo 6 caracteres">
+            </div>
+            <div class="form-group">
+              <label>Confirmar nueva contraseña</label>
+              <input type="password" id="pw-confirm" placeholder="Repetir contraseña">
+            </div>
+            <button type="submit" class="btn">Actualizar contraseña</button>
+          </form>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ─── MODALS ─── -->
+
+  <!-- Project Modal -->
+  <div class="modal-overlay" id="project-modal">
+    <div class="modal">
+      <div class="modal-title">
+        <span id="project-modal-title">Nuevo Proyecto</span>
+        <button class="modal-close" data-close="project-modal">×</button>
+      </div>
+      <form id="project-form">
+        <input type="hidden" id="project-id">
+        <div class="form-group">
+          <label>Nombre del proyecto</label>
+          <input type="text" id="project-name" placeholder="Ej: Rediseño Web" required>
+        </div>
+        <div class="form-group">
+          <label>Descripción</label>
+          <textarea id="project-description" placeholder="Descripción opcional..."></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Fecha de inicio</label>
+            <input type="date" id="project-start" required>
+          </div>
+          <div class="form-group">
+            <label>Fecha de fin</label>
+            <input type="date" id="project-end" required>
+          </div>
+        </div>
+        <div class="form-group" id="project-status-group" style="display:none">
+          <label>Estado</label>
+          <select id="project-status">
+            <option value="active">Activo</option>
+            <option value="completed">Completado</option>
+            <option value="archived">Archivado</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" data-close="project-modal">Cancelar</button>
+          <button type="submit" class="btn">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Task Modal -->
+  <div class="modal-overlay" id="task-modal">
+    <div class="modal">
+      <div class="modal-title">
+        <span id="task-modal-title">Nueva Tarea</span>
+        <button class="modal-close" data-close="task-modal">×</button>
+      </div>
+      <form id="task-form">
+        <input type="hidden" id="task-id">
+        <input type="hidden" id="task-project-id">
+        <div class="form-group">
+          <label>Nombre de la tarea</label>
+          <input type="text" id="task-name" placeholder="Ej: Diseño de mockups" required>
+        </div>
+        <div class="form-group">
+          <label>Descripción</label>
+          <textarea id="task-description" placeholder="Descripción opcional..."></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Fecha de inicio</label>
+            <input type="date" id="task-start" required>
+          </div>
+          <div class="form-group">
+            <label>Fecha de fin</label>
+            <input type="date" id="task-end" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Progreso (%)</label>
+            <input type="number" id="task-progress" min="0" max="100" value="0">
+          </div>
+          <div class="form-group">
+            <label>Estado</label>
+            <select id="task-status">
+              <option value="pending">Pendiente</option>
+              <option value="in_progress">En progreso</option>
+              <option value="completed">Completado</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Asignar a</label>
+          <select id="task-assigned"></select>
+        </div>
+        <div class="form-group">
+          <label>Subtarea de</label>
+          <select id="task-parent">
+            <option value="">— Ninguna (tarea raíz) —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Color</label>
+          <div class="color-row" id="color-row"></div>
+          <input type="hidden" id="task-color" value="#e94560">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-danger btn-sm" id="delete-task-btn" style="display:none">🗑 Eliminar</button>
+          <button type="button" class="btn btn-secondary" data-close="task-modal">Cancelar</button>
+          <button type="submit" class="btn">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Team Member Modal -->
+  <div class="modal-overlay" id="member-modal">
+    <div class="modal">
+      <div class="modal-title">
+        <span>Agregar miembro</span>
+        <button class="modal-close" data-close="member-modal">×</button>
+      </div>
+      <form id="member-form">
+        <div class="form-group">
+          <label>Correo electrónico del usuario</label>
+          <input type="email" id="member-email" placeholder="correo@ejemplo.com" required>
+        </div>
+        <div class="form-group">
+          <label>Rol en el equipo</label>
+          <select id="member-role">
+            <option value="member">Miembro</option>
+            <option value="team_leader">Líder de equipo</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" data-close="member-modal">Cancelar</button>
+          <button type="submit" class="btn">Agregar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Team Create Modal -->
+  <div class="modal-overlay" id="team-modal">
+    <div class="modal">
+      <div class="modal-title">
+        <span>Crear equipo</span>
+        <button class="modal-close" data-close="team-modal">×</button>
+      </div>
+      <form id="team-form">
+        <div class="form-group">
+          <label>Nombre del equipo</label>
+          <input type="text" id="team-name" placeholder="Ej: Equipo Frontend" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" data-close="team-modal">Cancelar</button>
+          <button type="submit" class="btn">Crear</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast"></div>
+
+  <script>
+  // ─────────────────────────────────────────────
+  // CONSTANTS & UTILITIES
+  // ─────────────────────────────────────────────
+  const API = '';
+  const COLORS = ['#e94560','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e74c3c','#34495e','#16a085'];
+  let currentUser = null;
+  let currentProjectId = null;
+  let teamMembers = [];
+  let allTasks = [];
+  let ganttCellWidth = 28;
+
+  function token() { return localStorage.getItem('token'); }
+
+  async function api(path, opts = {}) {
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token(),
+        ...(opts.headers || {})
+      },
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error');
+    return data;
+  }
+
+  function toast(msg, type = 'info') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'show ' + type;
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.className = ''; }, 3000);
+  }
+
+  function openModal(id) {
+    document.getElementById(id).classList.add('open');
+  }
+
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+  }
+
+  document.querySelectorAll('[data-close]').forEach(btn => {
+    btn.addEventListener('click', () => closeModal(btn.dataset.close));
+  });
+
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) overlay.classList.remove('open');
+    });
+  });
+
+  // ─────────────────────────────────────────────
+  // NAVIGATION
+  // ─────────────────────────────────────────────
+  function navigate(sectionId, title) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const sec = document.getElementById(sectionId);
+    if (sec) sec.classList.add('active');
+    document.querySelector(`[data-section="${sectionId}"]`)?.classList.add('active');
+    document.getElementById('topbar-title').textContent = title;
+    closeSidebar();
+  }
+
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const section = item.dataset.section;
+      const title = item.textContent.trim().replace(/^./, '').trim();
+      navigate(section, title);
+      if (section === 'dashboard') loadDashboard();
+      if (section === 'team-section') loadTeam();
+      if (section === 'profile-section') loadProfile();
+    });
+  });
+
+  // Sidebar toggle (mobile)
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+
+  document.getElementById('menu-toggle').addEventListener('click', () => {
+    sidebar.classList.add('open');
+    overlay.classList.add('open');
+  });
+
+  overlay.addEventListener('click', closeSidebar);
+
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    overlay.classList.remove('open');
+  }
+
+  // ─────────────────────────────────────────────
+  // AUTH GUARD
+  // ─────────────────────────────────────────────
+  async function init() {
+    if (!token()) return redirect();
+    try {
+      currentUser = await api('/api/auth/me');
+      document.getElementById('user-label').textContent = currentUser.username + ' · ' + roleLabel(currentUser.role);
+      setupUI();
+      loadDashboard();
+    } catch {
+      redirect();
+    }
+  }
+
+  function redirect() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/';
+  }
+
+  function roleLabel(role) {
+    return { admin: 'Admin', team_leader: 'Líder', member: 'Miembro' }[role] || role;
+  }
+
+  function setupUI() {
+    const canManage = ['admin','team_leader'].includes(currentUser.role);
+    if (canManage) {
+      document.getElementById('new-project-btn').style.display = '';
+      document.getElementById('new-team-btn').style.display = '';
+    }
+    if (!currentUser.team_id) {
+      document.getElementById('no-team-banner').style.display = '';
+    }
+  }
+
+  document.getElementById('logout-btn').addEventListener('click', () => {
+    localStorage.clear();
+    window.location.href = '/';
+  });
+
+  // ─────────────────────────────────────────────
+  // DASHBOARD / PROJECTS
+  // ─────────────────────────────────────────────
+  async function loadDashboard() {
+    const grid = document.getElementById('projects-grid');
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="loading-spinner"></div></div>';
+    try {
+      const projects = await api('/api/projects');
+      renderProjectGrid(projects);
+    } catch (e) {
+      grid.innerHTML = `<p style="color:var(--accent)">${e.message}</p>`;
+    }
+  }
+
+  function renderProjectGrid(projects) {
+    const grid = document.getElementById('projects-grid');
+    if (!projects.length) {
+      grid.innerHTML = `
+        <div class="empty-state" style="grid-column:1/-1">
+          <div class="icon">📋</div>
+          <h3>Sin proyectos aún</h3>
+          <p>Crea tu primer proyecto para empezar a planificar.</p>
+        </div>`;
+      return;
+    }
+    grid.innerHTML = projects.map(p => {
+      const progress = p.task_count ? Math.round(Math.random() * 60) : 0; // placeholder until we compute real
+      return `
+        <div class="card" data-id="${p.id}" onclick="openGantt(${p.id}, '${escHtml(p.name)}')">
+          <div class="card-header">
+            <span class="card-title">${escHtml(p.name)}</span>
+            <span class="badge badge-${p.status}">${p.status}</span>
+          </div>
+          <div class="card-meta">
+            📅 ${p.start_date} → ${p.end_date}<br>
+            👥 ${escHtml(p.team_name || '')} &nbsp;·&nbsp; ${p.task_count} tareas
+          </div>
+          <div class="card-meta">${escHtml(p.description || '')}</div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${progress}%"></div></div>
+        </div>`;
+    }).join('');
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // New project
+  document.getElementById('new-project-btn').addEventListener('click', () => {
+    document.getElementById('project-id').value = '';
+    document.getElementById('project-form').reset();
+    document.getElementById('project-modal-title').textContent = 'Nuevo Proyecto';
+    document.getElementById('project-status-group').style.display = 'none';
+    // Default dates
+    const today = new Date().toISOString().slice(0,10);
+    const next = new Date(Date.now() + 30*24*3600*1000).toISOString().slice(0,10);
+    document.getElementById('project-start').value = today;
+    document.getElementById('project-end').value = next;
+    openModal('project-modal');
+  });
+
+  document.getElementById('project-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const id = document.getElementById('project-id').value;
+    const body = {
+      name: document.getElementById('project-name').value,
+      description: document.getElementById('project-description').value,
+      start_date: document.getElementById('project-start').value,
+      end_date: document.getElementById('project-end').value,
+      status: document.getElementById('project-status').value
+    };
+    try {
+      if (id) {
+        await api(`/api/projects/${id}`, { method: 'PUT', body });
+        toast('Proyecto actualizado', 'success');
+      } else {
+        await api('/api/projects', { method: 'POST', body });
+        toast('Proyecto creado', 'success');
+      }
+      closeModal('project-modal');
+      loadDashboard();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // GANTT VIEW
+  // ─────────────────────────────────────────────
+  async function openGantt(projectId, projectName) {
+    currentProjectId = projectId;
+    document.getElementById('nav-gantt').style.display = '';
+    navigate('gantt-section', 'Gantt');
+    renderGanttShell(projectId, projectName);
+    await loadGantt(projectId);
+  }
+
+  function renderGanttShell(projectId, projectName) {
+    const sec = document.getElementById('gantt-section');
+    sec.innerHTML = `
+      <div class="gantt-toolbar">
+        <span class="project-name">📅 ${escHtml(projectName)}</span>
+        <button class="btn btn-sm btn-secondary" onclick="openEditProject(${projectId})">✏️ Editar</button>
+        <button class="btn btn-sm btn-secondary" id="zoom-out-btn">−</button>
+        <button class="btn btn-sm btn-secondary" id="zoom-in-btn">+</button>
+        <button class="btn btn-sm" id="add-task-btn">+ Tarea</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteProject(${projectId})">🗑 Borrar</button>
+      </div>
+      <div class="gantt-container" id="gantt-container">
+        <div class="gantt-left">
+          <div class="gantt-left-header">Tareas</div>
+          <div class="gantt-tasks-list" id="gantt-tasks-list"></div>
+        </div>
+        <div class="gantt-right" id="gantt-right">
+          <div class="gantt-timeline-header" id="gantt-timeline-header">
+            <div class="gantt-timeline-header-scroll" id="header-scroll"></div>
+          </div>
+          <div class="gantt-chart-body" id="gantt-chart-body">
+            <div class="gantt-chart-scroll" id="gantt-chart-scroll"></div>
+          </div>
+        </div>
+      </div>`;
+
+    document.getElementById('add-task-btn').addEventListener('click', () => openTaskModal(null, projectId));
+    document.getElementById('zoom-in-btn').addEventListener('click', () => { ganttCellWidth = Math.min(ganttCellWidth + 4, 60); renderGanttChart(); });
+    document.getElementById('zoom-out-btn').addEventListener('click', () => { ganttCellWidth = Math.max(ganttCellWidth - 4, 16); renderGanttChart(); });
+
+    // Sync scroll between header and body
+    const chartBody = document.getElementById('gantt-chart-body');
+    const headerWrap = document.getElementById('gantt-timeline-header');
+    chartBody.addEventListener('scroll', () => {
+      headerWrap.scrollLeft = chartBody.scrollLeft;
+      document.getElementById('gantt-tasks-list').scrollTop = chartBody.scrollTop;
+    });
+  }
+
+  async function loadGantt(projectId) {
+    try {
+      // Load tasks and team members in parallel
+      [allTasks, teamMembers] = await Promise.all([
+        api(`/api/projects/${projectId}/tasks`),
+        currentUser.team_id ? api(`/api/teams/${currentUser.team_id}/members`) : Promise.resolve([])
+      ]);
+      renderGanttChart();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  function getProjectDateRange() {
+    if (!allTasks.length) {
+      const today = new Date();
+      return { start: today, days: 30 };
+    }
+    const starts = allTasks.map(t => new Date(t.start_date));
+    const ends = allTasks.map(t => new Date(t.end_date));
+    let minDate = new Date(Math.min(...starts));
+    let maxDate = new Date(Math.max(...ends));
+    // Pad 3 days each side
+    minDate.setDate(minDate.getDate() - 3);
+    maxDate.setDate(maxDate.getDate() + 7);
+    const days = Math.ceil((maxDate - minDate) / 86400000) + 1;
+    return { start: minDate, days };
+  }
+
+  function dateToIndex(date, rangeStart) {
+    return Math.round((new Date(date) - rangeStart) / 86400000);
+  }
+
+  function renderGanttChart() {
+    if (!document.getElementById('gantt-tasks-list')) return;
+
+    const { start: rangeStart, days } = getProjectDateRange();
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    // Build task list (root tasks first, then children)
+    const rootTasks = allTasks.filter(t => !t.parent_id);
+    const childrenOf = {};
+    allTasks.filter(t => t.parent_id).forEach(t => {
+      if (!childrenOf[t.parent_id]) childrenOf[t.parent_id] = [];
+      childrenOf[t.parent_id].push(t);
+    });
+
+    const orderedTasks = [];
+    rootTasks.forEach(t => {
+      orderedTasks.push(t);
+      (childrenOf[t.id] || []).forEach(c => orderedTasks.push({ ...c, _isChild: true }));
+    });
+
+    // Render task list (left panel)
+    const taskList = document.getElementById('gantt-tasks-list');
+    taskList.innerHTML = orderedTasks.map(task => `
+      <div class="gantt-task-row ${task._isChild ? 'task-indent' : ''}"
+           data-id="${task.id}" onclick="openTaskModal(${task.id}, ${currentProjectId})">
+        <div class="task-color-dot" style="background:${task.color}"></div>
+        <span class="task-label" title="${escHtml(task.name)}">${escHtml(task.name)}</span>
+        <span class="task-progress-text">${task.progress}%</span>
+      </div>`).join('');
+
+    // Render timeline header
+    const headerScroll = document.getElementById('header-scroll');
+    const totalWidth = days * ganttCellWidth;
+    headerScroll.style.width = totalWidth + 'px';
+    let headerHtml = '';
+    for (let i = 0; i < days; i++) {
+      const d = new Date(rangeStart);
+      d.setDate(d.getDate() + i);
+      const isToday = d.toDateString() === today.toDateString();
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const label = d.getDate() === 1 || i === 0
+        ? `${d.getDate()}/${d.getMonth()+1}`
+        : String(d.getDate());
+      headerHtml += `<div class="gantt-day-cell ${isToday?'today':''} ${isWeekend?'weekend':''}"
+        style="width:${ganttCellWidth}px">${label}</div>`;
+    }
+    headerScroll.innerHTML = headerHtml;
+
+    // Render chart body
+    const chartScroll = document.getElementById('gantt-chart-scroll');
+    chartScroll.style.width = totalWidth + 'px';
+    chartScroll.style.minHeight = (orderedTasks.length * 38) + 'px';
+
+    // Today line
+    const todayIdx = dateToIndex(today, rangeStart);
+    const todayLine = todayIdx >= 0 && todayIdx < days
+      ? `<div class="gantt-today-line" style="left:${todayIdx * ganttCellWidth + ganttCellWidth/2}px"></div>`
+      : '';
+
+    // Rows with bars
+    let rowsHtml = '';
+    orderedTasks.forEach(task => {
+      let cells = '';
+      for (let i = 0; i < days; i++) {
+        const d = new Date(rangeStart);
+        d.setDate(d.getDate() + i);
+        const isToday = d.toDateString() === today.toDateString();
+        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+        cells += `<div class="gantt-cell ${isToday?'today':''} ${isWeekend?'weekend':''}" style="width:${ganttCellWidth}px"></div>`;
+      }
+
+      const startIdx = dateToIndex(task.start_date, rangeStart);
+      const endIdx = dateToIndex(task.end_date, rangeStart);
+      const barWidth = Math.max((endIdx - startIdx + 1) * ganttCellWidth, ganttCellWidth);
+      const barLeft = startIdx * ganttCellWidth;
+      const assignedLabel = task.assigned_to_name ? ` · ${task.assigned_to_name}` : '';
+
+      rowsHtml += `
+        <div class="gantt-chart-row" style="width:${totalWidth}px">
+          ${cells}
+          <div class="gantt-bar" style="left:${barLeft}px; width:${barWidth}px; background:${task.color}"
+               onclick="openTaskModal(${task.id}, ${currentProjectId})" title="${escHtml(task.name)}${assignedLabel}">
+            <div class="gantt-bar-inner" style="width:${task.progress}%"></div>
+            <span class="gantt-bar-label">${escHtml(task.name)}${escHtml(assignedLabel)}</span>
+          </div>
+        </div>`;
+    });
+
+    chartScroll.innerHTML = todayLine + rowsHtml;
+  }
+
+  // ─────────────────────────────────────────────
+  // TASK MODAL
+  // ─────────────────────────────────────────────
+  function buildColorRow(selected) {
+    const row = document.getElementById('color-row');
+    row.innerHTML = COLORS.map(c => `
+      <div class="color-swatch ${c===selected?'selected':''}" style="background:${c}" data-color="${c}"></div>
+    `).join('');
+    row.querySelectorAll('.color-swatch').forEach(sw => {
+      sw.addEventListener('click', () => {
+        row.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+        sw.classList.add('selected');
+        document.getElementById('task-color').value = sw.dataset.color;
+      });
+    });
+  }
+
+  function buildAssignedSelect(selectedId) {
+    const sel = document.getElementById('task-assigned');
+    sel.innerHTML = `<option value="">— Sin asignar —</option>` +
+      teamMembers.map(m => `<option value="${m.id}" ${m.id == selectedId ? 'selected' : ''}>${escHtml(m.username)} (${escHtml(m.email)})</option>`).join('');
+  }
+
+  function buildParentSelect(currentTaskId, selectedParentId) {
+    const sel = document.getElementById('task-parent');
+    const roots = allTasks.filter(t => !t.parent_id && t.id !== currentTaskId);
+    sel.innerHTML = `<option value="">— Ninguna (tarea raíz) —</option>` +
+      roots.map(t => `<option value="${t.id}" ${t.id == selectedParentId ? 'selected' : ''}>${escHtml(t.name)}</option>`).join('');
+  }
+
+  async function openTaskModal(taskId, projectId) {
+    const canEdit = ['admin','team_leader'].includes(currentUser.role);
+    document.getElementById('task-project-id').value = projectId;
+
+    // Load team members if needed
+    if (teamMembers.length === 0 && currentUser.team_id) {
+      try { teamMembers = await api(`/api/teams/${currentUser.team_id}/members`); } catch {}
+    }
+
+    if (taskId) {
+      const task = allTasks.find(t => t.id == taskId);
+      if (!task) return;
+
+      // Members can only edit tasks assigned to them
+      if (currentUser.role === 'member' && task.assigned_to !== currentUser.id) {
+        toast('Solo puedes editar tareas asignadas a ti.', 'error');
+        return;
+      }
+
+      document.getElementById('task-id').value = task.id;
+      document.getElementById('task-name').value = task.name;
+      document.getElementById('task-description').value = task.description || '';
+      document.getElementById('task-start').value = task.start_date;
+      document.getElementById('task-end').value = task.end_date;
+      document.getElementById('task-progress').value = task.progress;
+      document.getElementById('task-status').value = task.status;
+      document.getElementById('task-color').value = task.color;
+      document.getElementById('task-modal-title').textContent = 'Editar Tarea';
+      document.getElementById('delete-task-btn').style.display = canEdit ? '' : 'none';
+      buildColorRow(task.color);
+      buildAssignedSelect(task.assigned_to);
+      buildParentSelect(task.id, task.parent_id);
+    } else {
+      if (!canEdit) { toast('No tienes permisos para crear tareas.', 'error'); return; }
+      document.getElementById('task-id').value = '';
+      document.getElementById('task-form').reset();
+      document.getElementById('task-color').value = '#e94560';
+      document.getElementById('task-modal-title').textContent = 'Nueva Tarea';
+      document.getElementById('delete-task-btn').style.display = 'none';
+      buildColorRow('#e94560');
+      buildAssignedSelect(null);
+      buildParentSelect(null, null);
+      // Default dates from project range
+      if (allTasks.length) {
+        const task0 = allTasks[0];
+        document.getElementById('task-start').value = task0.start_date;
+        document.getElementById('task-end').value = task0.end_date;
+      } else {
+        const today = new Date().toISOString().slice(0,10);
+        const next = new Date(Date.now() + 7*24*3600*1000).toISOString().slice(0,10);
+        document.getElementById('task-start').value = today;
+        document.getElementById('task-end').value = next;
+      }
+    }
+
+    // Disable fields for members editing non-assigned tasks
+    const formInputs = document.querySelectorAll('#task-form input, #task-form select, #task-form textarea');
+    if (currentUser.role === 'member') {
+      formInputs.forEach(el => {
+        el.disabled = (el.id !== 'task-progress' && el.id !== 'task-status');
+      });
+    } else {
+      formInputs.forEach(el => el.disabled = false);
+    }
+
+    openModal('task-modal');
+  }
+
+  document.getElementById('task-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const id = document.getElementById('task-id').value;
+    const projectId = document.getElementById('task-project-id').value;
+    const body = {
+      name: document.getElementById('task-name').value,
+      description: document.getElementById('task-description').value,
+      start_date: document.getElementById('task-start').value,
+      end_date: document.getElementById('task-end').value,
+      progress: parseInt(document.getElementById('task-progress').value) || 0,
+      status: document.getElementById('task-status').value,
+      color: document.getElementById('task-color').value,
+      assigned_to: document.getElementById('task-assigned').value || null,
+      parent_id: document.getElementById('task-parent').value || null
+    };
+    try {
+      if (id) {
+        await api(`/api/projects/${projectId}/tasks/${id}`, { method: 'PUT', body });
+        toast('Tarea actualizada', 'success');
+      } else {
+        await api(`/api/projects/${projectId}/tasks`, { method: 'POST', body });
+        toast('Tarea creada', 'success');
+      }
+      closeModal('task-modal');
+      allTasks = await api(`/api/projects/${projectId}/tasks`);
+      renderGanttChart();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  });
+
+  document.getElementById('delete-task-btn').addEventListener('click', async () => {
+    const id = document.getElementById('task-id').value;
+    const projectId = document.getElementById('task-project-id').value;
+    if (!confirm('¿Eliminar esta tarea?')) return;
+    try {
+      await api(`/api/projects/${projectId}/tasks/${id}`, { method: 'DELETE' });
+      closeModal('task-modal');
+      toast('Tarea eliminada', 'success');
+      allTasks = await api(`/api/projects/${projectId}/tasks`);
+      renderGanttChart();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // PROJECT EDIT & DELETE
+  // ─────────────────────────────────────────────
+  async function openEditProject(projectId) {
+    try {
+      const p = await api(`/api/projects/${projectId}`);
+      document.getElementById('project-id').value = p.id;
+      document.getElementById('project-name').value = p.name;
+      document.getElementById('project-description').value = p.description || '';
+      document.getElementById('project-start').value = p.start_date;
+      document.getElementById('project-end').value = p.end_date;
+      document.getElementById('project-status').value = p.status;
+      document.getElementById('project-modal-title').textContent = 'Editar Proyecto';
+      document.getElementById('project-status-group').style.display = '';
+      openModal('project-modal');
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  async function deleteProject(projectId) {
+    if (!confirm('¿Eliminar este proyecto y todas sus tareas?')) return;
+    try {
+      await api(`/api/projects/${projectId}`, { method: 'DELETE' });
+      toast('Proyecto eliminado', 'success');
+      navigate('dashboard', 'Dashboard');
+      document.getElementById('nav-gantt').style.display = 'none';
+      loadDashboard();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // TEAM SECTION
+  // ─────────────────────────────────────────────
+  async function loadTeam() {
+    const container = document.getElementById('team-content');
+    container.innerHTML = '<div class="empty-state"><div class="loading-spinner"></div></div>';
+    try {
+      const teams = await api('/api/teams');
+      if (!teams.length) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">👥</div>
+            <h3>Sin equipo</h3>
+            <p>Crea un equipo o espera a que tu líder te invite.</p>
+          </div>`;
+        return;
+      }
+      const team = teams[0];
+      const members = await api(`/api/teams/${team.id}/members`);
+      teamMembers = members;
+      const canManage = ['admin','team_leader'].includes(currentUser.role);
+
+      container.innerHTML = `
+        <div style="margin-bottom:1.5rem">
+          <h3 style="font-size:1.1rem; margin-bottom:0.3rem">${escHtml(team.name)}</h3>
+          <p style="color:var(--text-secondary); font-size:0.87rem">Líder: ${escHtml(team.leader_name || '')}</p>
+        </div>
+        <div class="section-header" style="margin-bottom:1rem">
+          <h3 style="font-size:0.95rem; color:var(--text-secondary)">MIEMBROS</h3>
+          ${canManage ? `<button class="btn btn-sm" onclick="openModal('member-modal')">+ Invitar</button>` : ''}
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Usuario</th><th>Correo</th><th>Rol</th>${canManage ? '<th>Acciones</th>' : ''}</tr></thead>
+            <tbody>
+              ${members.map(m => `
+                <tr>
+                  <td>${escHtml(m.username)}</td>
+                  <td style="color:var(--text-secondary)">${escHtml(m.email)}</td>
+                  <td><span class="role-badge role-${m.role}">${roleLabel(m.role)}</span></td>
+                  ${canManage && m.id !== currentUser.id ? `<td><button class="btn btn-danger btn-sm" onclick="removeMember(${team.id},${m.id})">Quitar</button></td>` : (canManage ? '<td>—</td>' : '')}
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+
+      // Member form team_id
+      document.getElementById('member-form').dataset.teamId = team.id;
+    } catch (e) {
+      container.innerHTML = `<p style="color:var(--accent)">${e.message}</p>`;
+    }
+  }
+
+  document.getElementById('new-team-btn').addEventListener('click', () => {
+    document.getElementById('team-name').value = '';
+    openModal('team-modal');
+  });
+
+  document.getElementById('team-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = document.getElementById('team-name').value.trim();
+    if (!name) return;
+    try {
+      await api('/api/teams', { method: 'POST', body: { name } });
+      toast('Equipo creado', 'success');
+      closeModal('team-modal');
+      // Refresh user info (team_id has changed)
+      currentUser = await api('/api/auth/me');
+      document.getElementById('user-label').textContent = currentUser.username + ' · ' + roleLabel(currentUser.role);
+      document.getElementById('no-team-banner').style.display = 'none';
+      loadTeam();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  });
+
+  document.getElementById('member-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const teamId = document.getElementById('member-form').dataset.teamId;
+    const email = document.getElementById('member-email').value.trim();
+    const role = document.getElementById('member-role').value;
+    if (!email) return;
+    try {
+      await api(`/api/teams/${teamId}/members`, { method: 'POST', body: { email, role } });
+      toast('Miembro agregado', 'success');
+      closeModal('member-modal');
+      loadTeam();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  });
+
+  async function removeMember(teamId, userId) {
+    if (!confirm('¿Quitar a este miembro del equipo?')) return;
+    try {
+      await api(`/api/teams/${teamId}/members/${userId}`, { method: 'DELETE' });
+      toast('Miembro removido', 'success');
+      loadTeam();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // PROFILE SECTION
+  // ─────────────────────────────────────────────
+  function loadProfile() {
+    const el = document.getElementById('profile-data');
+    if (!currentUser) return;
+    el.innerHTML = `
+      <p>Nombre: <strong>${escHtml(currentUser.username)}</strong></p>
+      <p>Correo: <strong>${escHtml(currentUser.email)}</strong></p>
+      <p>Rol: <span class="role-badge role-${currentUser.role}">${roleLabel(currentUser.role)}</span></p>
+      <p>Equipo ID: <strong>${currentUser.team_id || '—'}</strong></p>
+      <p>Miembro desde: <strong>${currentUser.created_at ? currentUser.created_at.slice(0,10) : '—'}</strong></p>
+      <hr style="border-color:var(--border); margin: 1rem 0">`;
+  }
+
+  document.getElementById('password-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const currentPassword = document.getElementById('pw-current').value;
+    const newPassword = document.getElementById('pw-new').value;
+    const confirm = document.getElementById('pw-confirm').value;
+
+    if (!currentPassword || !newPassword || !confirm) {
+      return toast('Completa todos los campos', 'error');
+    }
+    if (newPassword.length < 6) {
+      return toast('La nueva contraseña debe tener mínimo 6 caracteres', 'error');
+    }
+    if (newPassword !== confirm) {
+      return toast('Las contraseñas no coinciden', 'error');
+    }
+    try {
+      await api('/api/auth/password', { method: 'PUT', body: { currentPassword, newPassword } });
+      toast('Contraseña actualizada', 'success');
+      document.getElementById('password-form').reset();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // BOOT
+  // ─────────────────────────────────────────────
+  init();
+  </script>
+</body>
+</html>
