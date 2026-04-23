@@ -1153,8 +1153,7 @@
       return;
     }
     grid.innerHTML = projects.map(p => {
-      const progress = p.task_count ? Math.round(Math.random() * 60) : 0; // placeholder until we compute real
-      return `
+      const progress = Math.round(p.avg_progress || 0);      return `
         <div class="card" data-id="${p.id}" onclick="openGantt(${p.id}, '${escHtml(p.name)}')">
           <div class="card-header">
             <span class="card-title">${escHtml(p.name)}</span>
@@ -1628,7 +1627,11 @@
     const name = document.getElementById('team-name').value.trim();
     if (!name) return;
     try {
-      await api('/api/teams', { method: 'POST', body: { name } });
+      const data = await api('/api/teams', { method: 'POST', body: { name } });
+      // Server returns a refreshed token with updated team_id
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+      }
       toast('Equipo creado', 'success');
       closeModal('team-modal');
       // Refresh user info (team_id has changed)

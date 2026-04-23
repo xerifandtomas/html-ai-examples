@@ -37,10 +37,7 @@ router.post('/register', (req, res) => {
 
     return res.status(201).json({ token, user });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 router.post('/login', (req, res) => {
@@ -66,10 +63,7 @@ router.post('/login', (req, res) => {
     const { password_hash, ...safeUser } = user;
     return res.json({ token, user: safeUser });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 router.get('/me', requireAuth, (req, res) => {
@@ -81,10 +75,7 @@ router.get('/me', requireAuth, (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
     return res.json(user);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 router.put('/password', requireAuth, (req, res) => {
@@ -104,10 +95,7 @@ router.put('/password', requireAuth, (req, res) => {
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, req.user.id);
     return res.json({ message: 'Password updated successfully' });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 module.exports = router;

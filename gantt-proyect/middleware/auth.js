@@ -2,6 +2,11 @@ const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
+if (process.env.NODE_ENV === 'production' && JWT_SECRET === 'dev_secret_change_in_production') {
+  console.error('FATAL: JWT_SECRET is not set. Set a strong secret in the JWT_SECRET environment variable.');
+  process.exit(1);
+}
+
 function requireAuth(req, res, next) {
   const header = req.headers['authorization'];
   if (!header || !header.startsWith('Bearer ')) {

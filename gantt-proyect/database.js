@@ -4,18 +4,23 @@ const fs = require('fs');
 
 const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'data', 'gantt.db');
 
+let _db = null;
+
+// Singleton: reuse a single connection for the lifetime of the process
 function getDb() {
+  if (_db) return _db;
   const dir = path.dirname(DB_PATH);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  return new Database(DB_PATH);
+  _db = new Database(DB_PATH);
+  _db.pragma('journal_mode = WAL');
+  _db.pragma('foreign_keys = ON');
+  return _db;
 }
 
 function initDatabase() {
   const db = getDb();
-
-  db.exec(`PRAGMA foreign_keys = ON;`);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS teams (
@@ -65,7 +70,6 @@ function initDatabase() {
     );
   `);
 
-  db.close();
   console.log('Database initialized at', DB_PATH);
 }
 

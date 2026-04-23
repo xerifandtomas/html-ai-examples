@@ -29,10 +29,7 @@ router.get('/', (req, res) => {
 
     return res.json(team ? [team] : []);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 // POST /api/teams
@@ -44,22 +41,32 @@ router.post('/', (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Team name is required' });
 
+  const jwt = require('jsonwebtoken');
+  const { JWT_SECRET } = require('../middleware/auth');
   const db = getDb();
   try {
-    const result = db.prepare('INSERT INTO teams (name, leader_id) VALUES (?, ?)').run(name, req.user.id);
-    // Assign creator as team_leader of this team
-    db.prepare('UPDATE users SET team_id = ?, role = ? WHERE id = ?').run(
-      result.lastInsertRowid,
-      req.user.role === 'admin' ? 'admin' : 'team_leader',
-      req.user.id
+    const newTeamId = db.transaction(() => {
+      const result = db.prepare('INSERT INTO teams (name, leader_id) VALUES (?, ?)').run(name, req.user.id);
+      const teamId = result.lastInsertRowid;
+      db.prepare('UPDATE users SET team_id = ?, role = ? WHERE id = ?').run(
+        teamId,
+        req.user.role === 'admin' ? 'admin' : 'team_leader',
+        req.user.id
+      );
+      return teamId;
+    })();
+
+    const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(newTeamId);
+    const user = db.prepare('SELECT id, email, role, team_id FROM users WHERE id = ?').get(req.user.id);
+    // Return a refreshed token so subsequent requests reflect the new team_id
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role, team_id: user.team_id },
+      JWT_SECRET,
+      { expiresIn: '7d' }
     );
-    const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(result.lastInsertRowid);
-    return res.status(201).json(team);
+    return res.status(201).json({ team, token });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 // GET /api/teams/:id/members
@@ -76,10 +83,7 @@ router.get('/:id/members', (req, res) => {
     ).all(teamId);
     return res.json(members);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 // POST /api/teams/:id/members  — add by email
@@ -106,10 +110,7 @@ router.post('/:id/members', (req, res) => {
     const updated = db.prepare('SELECT id, email, username, role, team_id FROM users WHERE id = ?').get(user.id);
     return res.json(updated);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 // DELETE /api/teams/:id/members/:userId
@@ -129,10 +130,7 @@ router.delete('/:id/members/:userId', (req, res) => {
     db.prepare("UPDATE users SET team_id = NULL, role = 'member' WHERE id = ? AND team_id = ?").run(userId, teamId);
     return res.json({ message: 'Member removed' });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 module.exports = router;

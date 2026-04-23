@@ -10,21 +10,20 @@ router.get('/', (req, res) => {
   const db = getDb();
   try {
     let projects;
-    if (req.user.role === 'admin') {
-      projects = db.prepare(`
+    const cols = `
         SELECT p.*, t.name AS team_name,
                u.username AS created_by_name,
-               (SELECT COUNT(*) FROM tasks WHERE project_id = p.id) AS task_count
+               (SELECT COUNT(*) FROM tasks WHERE project_id = p.id) AS task_count,
+               COALESCE((SELECT AVG(progress) FROM tasks WHERE project_id = p.id), 0) AS avg_progress`;
+    if (req.user.role === 'admin') {
+      projects = db.prepare(`${cols}
         FROM projects p
         LEFT JOIN teams t ON t.id = p.team_id
         LEFT JOIN users u ON u.id = p.created_by
         ORDER BY p.created_at DESC
       `).all();
     } else if (req.user.team_id) {
-      projects = db.prepare(`
-        SELECT p.*, t.name AS team_name,
-               u.username AS created_by_name,
-               (SELECT COUNT(*) FROM tasks WHERE project_id = p.id) AS task_count
+      projects = db.prepare(`${cols}
         FROM projects p
         LEFT JOIN teams t ON t.id = p.team_id
         LEFT JOIN users u ON u.id = p.created_by
@@ -36,10 +35,7 @@ router.get('/', (req, res) => {
     }
     return res.json(projects);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 // POST /api/projects
@@ -53,13 +49,16 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'name, start_date, and end_date are required' });
   }
 
-  const resolvedTeamId = req.user.role === 'admin' ? (team_id || req.user.team_id) : req.user.team_id;
-  if (!resolvedTeamId) {
-    return res.status(400).json({ error: 'Team association required. Join or create a team first.' });
-  }
-
   const db = getDb();
   try {
+    // Always read team_id fresh from DB in case JWT is stale after team creation
+    const freshUser = db.prepare('SELECT team_id FROM users WHERE id = ?').get(req.user.id);
+    const freshTeamId = freshUser ? freshUser.team_id : req.user.team_id;
+    const resolvedTeamId = req.user.role === 'admin' ? (team_id || freshTeamId) : freshTeamId;
+    if (!resolvedTeamId) {
+      return res.status(400).json({ error: 'Team association required. Join or create a team first.' });
+    }
+
     const result = db.prepare(`
       INSERT INTO projects (name, description, start_date, end_date, team_id, created_by)
       VALUES (?, ?, ?, ?, ?, ?)
@@ -75,10 +74,7 @@ router.post('/', (req, res) => {
 
     return res.status(201).json(project);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 // GET /api/projects/:id
@@ -102,10 +98,7 @@ router.get('/:id', (req, res) => {
 
     return res.json(project);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 // PUT /api/projects/:id
@@ -143,10 +136,7 @@ router.put('/:id', (req, res) => {
 
     return res.json(updated);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 // DELETE /api/projects/:id
@@ -164,14 +154,13 @@ router.delete('/:id', (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    db.prepare('DELETE FROM tasks WHERE project_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
+    db.transaction(() => {
+      db.prepare('DELETE FROM tasks WHERE project_id = ?').run(req.params.id);
+      db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
+    })();
     return res.json({ message: 'Project deleted' });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 // GET /api/projects/:id/tasks
@@ -195,10 +184,7 @@ router.get('/:id/tasks', (req, res) => {
 
     return res.json(tasks);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 // POST /api/projects/:id/tasks
@@ -246,10 +232,7 @@ router.post('/:id/tasks', (req, res) => {
 
     return res.status(201).json(task);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 // PUT /api/projects/:id/tasks/:taskId
@@ -297,10 +280,7 @@ router.put('/:id/tasks/:taskId', (req, res) => {
 
     return res.json(updated);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 // DELETE /api/projects/:id/tasks/:taskId
@@ -314,15 +294,14 @@ router.delete('/:id/tasks/:taskId', (req, res) => {
     const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND project_id = ?').get(req.params.taskId, req.params.id);
     if (!task) return res.status(404).json({ error: 'Task not found' });
 
-    // Delete child tasks first
-    db.prepare('DELETE FROM tasks WHERE parent_id = ?').run(req.params.taskId);
-    db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.taskId);
+    // Delete child tasks and parent atomically
+    db.transaction(() => {
+      db.prepare('DELETE FROM tasks WHERE parent_id = ?').run(req.params.taskId);
+      db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.taskId);
+    })();
     return res.json({ message: 'Task deleted' });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  } finally {
-    db.close();
-  }
+    return res.status(500).json({ error: err.message });}
 });
 
 module.exports = router;
