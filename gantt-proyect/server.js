@@ -40,7 +40,7 @@ app.use('/api/projects', require('./routes/projects'));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // SPA fallback — serve index.html for non-API routes
-app.get('*', (req, res) => {
+app.get('*', apiLimiter, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 

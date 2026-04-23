@@ -8,6 +8,8 @@ services:
       - gantt_data:/app/data
     environment:
       - NODE_ENV=production
+      # IMPORTANT: Replace with a strong random secret before deploying!
+      # Generate one with: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
       - JWT_SECRET=change_this_secret_in_production
       - DATABASE_PATH=/app/data/gantt.db
     restart: unless-stopped
