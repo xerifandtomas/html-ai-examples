@@ -9,25 +9,26 @@ router.use(requireOrganization);
 // GET /api/projects
 router.get('/', async (req, res) => {
   try {
-    const { projects } = getRepos();
-    let teamId;
+    const { projects, teams } = getRepos();
+    // Admin and org owners see all projects in the org
     if (req.user.role === 'admin' || req.organization.role === 'owner') {
-      teamId = null; // admin/owner sees all projects in org
-    } else {
-      // In a real scenario, you might want to fetch all projects from all teams the user is in.
-      // For simplicity here, we rely on the client specifying the team, or we fetch all teams for the user.
-      // Assuming `findAll` can handle null teamId to fetch all projects in the org, but we need to restrict to user's teams.
-      // Actually, let's keep it simple: if not admin/owner, they must specify team_id via query param, or we just return all projects for teams they are members of.
-      // To not overcomplicate, I'll pass null and let the frontend filter if needed, or better, we should fix ProjectRepository to support filtering by user's teams.
-      // But for now, let's just pass null if they are admin/owner, else we need a team_id from query.
-      teamId = req.query.team_id;
-      if (!teamId) {
-          // If no team_id is provided, maybe return an empty array or require it.
-          // Let's just return empty for now to enforce team context for regular members.
-          return res.json([]);
-      }
+      return res.json(await projects.findAll(null, req.organization.id));
     }
-    return res.json(await projects.findAll(teamId, req.organization.id));
+    // Regular members: fetch all teams they belong to in this org, then collect all projects
+    const teamId = req.query.team_id;
+    if (teamId) {
+      return res.json(await projects.findAll(teamId, req.organization.id));
+    }
+    // No specific team — return projects from ALL teams the user belongs to in this org
+    const userTeams = await teams.findUserTeams(req.user.id, req.organization.id);
+    if (!userTeams.length) return res.json([]);
+    const results = await Promise.all(
+      userTeams.map(t => projects.findAll(t.id, req.organization.id))
+    );
+    // Flatten and deduplicate by project id
+    const seen = new Set();
+    const all = results.flat().filter(p => { if (seen.has(p.id)) return false; seen.add(p.id); return true; });
+    return res.json(all);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

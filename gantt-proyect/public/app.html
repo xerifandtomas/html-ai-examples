@@ -445,7 +445,7 @@
       font-weight: 600;
       color: var(--text-secondary);
       text-transform: uppercase;
-      height: 44px;
+      height: 64px;
       display: flex;
       align-items: center;
     }
@@ -471,7 +471,9 @@
     .gantt-task-row:hover { background: rgba(255,255,255,0.04); }
     .gantt-task-row.selected { background: rgba(233,69,96,0.08); }
 
-    .task-indent { padding-left: 1.5rem; }
+    .task-indent { padding-left: 1.75rem; }
+    .task-indent .task-color-dot { opacity: 0.8; }
+    .task-indent::before { content: '↳'; position: absolute; left: 0.75rem; color: var(--text-secondary); font-size: 0.75rem; }
 
     .task-color-dot {
       width: 9px;
@@ -500,17 +502,40 @@
     }
 
     .gantt-timeline-header {
-      height: 44px;
+      height: 64px;
       display: flex;
+      flex-direction: column;
       border-bottom: 1px solid var(--border);
       background: var(--bg-card);
       overflow: hidden;
       position: relative;
     }
 
+    .gantt-month-row {
+      display: flex;
+      height: 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .gantt-month-cell {
+      flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 0.5rem;
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: rgba(255,255,255,0.02);
+      overflow: hidden;
+    }
+
     .gantt-timeline-header-scroll {
       display: flex;
-      height: 100%;
+      height: 44px;
     }
 
     .gantt-day-cell {
@@ -558,6 +583,13 @@
 
     .gantt-cell.today { background: rgba(233,69,96,0.06); }
     .gantt-cell.weekend { background: rgba(255,255,255,0.01); }
+
+    .task-status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
 
     .gantt-bar {
       position: absolute;
@@ -739,6 +771,11 @@
     <div class="sidebar-brand">
       <h2>Gantt<span>SaaS</span></h2>
       <p id="user-label">Cargando...</p>
+      <div id="org-badge" style="margin-top:0.5rem; padding:0.4rem 0.7rem; background:rgba(255,255,255,0.07); border-radius:6px; font-size:0.78rem">
+        <span style="opacity:0.6">Org:</span>
+        <strong id="org-name-label" style="margin-left:0.3rem">...</strong>
+        <span id="org-role-label" style="opacity:0.5; margin-left:0.3rem; font-size:0.72rem"></span>
+      </div>
     </div>
     <nav>
       <div class="nav-item active" data-section="dashboard">
@@ -749,6 +786,9 @@
       </div>
       <div class="nav-item" data-section="team-section" id="nav-team">
         <span class="nav-icon">👥</span> Equipo
+      </div>
+      <div class="nav-item" data-section="org-section" id="nav-org">
+        <span class="nav-icon">🏢</span> Organizaciones
       </div>
       <div class="nav-item" data-section="profile-section">
         <span class="nav-icon">👤</span> Perfil
@@ -793,7 +833,7 @@
       <!-- ─── TEAM ─── -->
       <section id="team-section" class="section">
         <div class="section-header">
-          <h2>Mi Equipo</h2>
+          <h2 id="team-section-title">Mi Equipo</h2>
           <button class="btn" id="new-team-btn" style="display:none">+ Crear equipo</button>
         </div>
         <div id="team-content">
@@ -812,18 +852,28 @@
           <form id="password-form">
             <div class="form-group">
               <label>Contraseña actual</label>
-              <input type="password" id="pw-current" placeholder="Contraseña actual">
+              <input type="password" id="pw-current" placeholder="Contraseña actual" autocomplete="current-password">
             </div>
             <div class="form-group">
               <label>Nueva contraseña</label>
-              <input type="password" id="pw-new" placeholder="Mínimo 6 caracteres">
+              <input type="password" id="pw-new" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
             </div>
             <div class="form-group">
               <label>Confirmar nueva contraseña</label>
-              <input type="password" id="pw-confirm" placeholder="Repetir contraseña">
+              <input type="password" id="pw-confirm" placeholder="Repetir contraseña" autocomplete="new-password">
             </div>
             <button type="submit" class="btn">Actualizar contraseña</button>
           </form>
+        </div>
+      </section>
+
+      <!-- ─── ORGANIZATIONS ─── -->
+      <section id="org-section" class="section">
+        <div class="section-header">
+          <h2>Organizaciones</h2>
+        </div>
+        <div id="org-content">
+          <div class="empty-state"><div class="loading-spinner"></div></div>
         </div>
       </section>
 
@@ -841,6 +891,10 @@
       </div>
       <form id="project-form">
         <input type="hidden" id="project-id">
+        <div class="form-group" id="project-team-group">
+          <label>Equipo</label>
+          <select id="project-team"></select>
+        </div>
         <div class="form-group">
           <label>Nombre del proyecto</label>
           <input type="text" id="project-name" placeholder="Ej: Rediseño Web" required>
@@ -991,6 +1045,61 @@
   <!-- Toast -->
   <div id="toast"></div>
 
+  <!-- First Org Setup Overlay -->
+  <div id="first-org-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,17,26,0.97); z-index:1000; align-items:center; justify-content:center; flex-direction:column">
+    <div style="text-align:center; max-width:420px; padding:2rem">
+      <div style="font-size:3rem; margin-bottom:1rem">🏢</div>
+      <h2 style="font-size:1.4rem; margin-bottom:0.5rem">Bienvenido a GanttSaaS</h2>
+      <p style="color:var(--text-secondary); margin-bottom:1.5rem">Crea tu primera organización para empezar a gestionar proyectos y equipos.</p>
+      <form id="first-org-form">
+        <div class="form-group">
+          <input type="text" id="first-org-name" placeholder="Nombre de la organización" required style="font-size:1rem; padding:0.75rem">
+        </div>
+        <button type="submit" class="btn" style="width:100%; padding:0.75rem">Crear organización</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Create Org Modal -->
+  <div class="modal-overlay" id="create-org-modal">
+    <div class="modal">
+      <div class="modal-title">
+        <span>Nueva organización</span>
+        <button class="modal-close" data-close="create-org-modal">×</button>
+      </div>
+      <form id="create-org-form">
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" id="create-org-name" placeholder="Ej: Mi empresa" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" data-close="create-org-modal">Cancelar</button>
+          <button type="submit" class="btn">Crear</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Invite Link Modal -->
+  <div class="modal-overlay" id="invite-link-modal">
+    <div class="modal">
+      <div class="modal-title">
+        <span>🔗 Link de invitación</span>
+        <button class="modal-close" data-close="invite-link-modal">×</button>
+      </div>
+      <div class="form-group">
+        <label>Comparte este enlace (expira en 7 días)</label>
+        <div style="display:flex; gap:0.5rem">
+          <input type="text" id="invite-link-value" readonly style="flex:1">
+          <button class="btn btn-secondary btn-sm" onclick="copyInviteLink()">Copiar</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn" data-close="invite-link-modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <script>
   // ─────────────────────────────────────────────
   // CONSTANTS & UTILITIES
@@ -1002,10 +1111,31 @@
   let teamMembers = [];
   let allTasks = [];
   let ganttCellWidth = 28;
+  let currentOrgId = null;
+  let userOrgs = [];
+  let orgTeams = [];
 
   function token() { return localStorage.getItem('token'); }
 
   async function api(path, opts = {}) {
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token(),
+      ...(opts.headers || {})
+    };
+    if (currentOrgId) headers['X-Organization-ID'] = currentOrgId;
+    const res = await fetch(API + path, {
+      ...opts,
+      headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error');
+    return data;
+  }
+
+  async function apiBase(path, opts = {}) {
+    // API calls that don't require org context (e.g. /api/auth, /api/organizations)
     const res = await fetch(API + path, {
       ...opts,
       headers: {
@@ -1067,6 +1197,7 @@
       if (section === 'dashboard') loadDashboard();
       if (section === 'team-section') loadTeam();
       if (section === 'profile-section') loadProfile();
+      if (section === 'org-section') loadOrgSection();
     });
   });
 
@@ -1092,13 +1223,57 @@
   async function init() {
     if (!token()) return redirect();
     try {
-      currentUser = await api('/api/auth/me');
+      currentUser = await apiBase('/api/auth/me');
       document.getElementById('user-label').textContent = currentUser.username + ' · ' + roleLabel(currentUser.role);
+      userOrgs = await apiBase('/api/organizations');
+      if (!userOrgs.length) {
+        showFirstOrgSetup();
+        return;
+      }
+      // Restore previously selected org or default to first
+      const savedId = parseInt(localStorage.getItem('org_id'));
+      const saved = userOrgs.find(o => o.id === savedId);
+      setActiveOrg(saved || userOrgs[0]);
       setupUI();
       loadDashboard();
     } catch {
       redirect();
     }
+  }
+
+  function setActiveOrg(org) {
+    currentOrgId = org.id;
+    localStorage.setItem('org_id', org.id);
+    document.getElementById('org-name-label').textContent = org.name;
+    document.getElementById('org-role-label').textContent = org.user_role || '';
+  }
+
+  function showFirstOrgSetup() {
+    // User has no org — show overlay to create one
+    document.getElementById('first-org-overlay').style.display = 'flex';
+  }
+
+  document.getElementById('first-org-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = document.getElementById('first-org-name').value.trim();
+    if (!name) return;
+    try {
+      const org = await apiBase('/api/organizations', { method: 'POST', body: { name } });
+      userOrgs = [{ ...org, user_role: 'owner' }];
+      document.getElementById('first-org-overlay').style.display = 'none';
+      setActiveOrg(userOrgs[0]);
+      setupUI();
+      loadDashboard();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  });
+
+  function copyInviteLink() {
+    const input = document.getElementById('invite-link-value');
+    input.select();
+    document.execCommand('copy');
+    toast('Enlace copiado', 'success');
   }
 
   function redirect() {
@@ -1112,14 +1287,12 @@
   }
 
   function setupUI() {
-    const canManage = ['admin','team_leader'].includes(currentUser.role);
-    if (canManage) {
-      document.getElementById('new-project-btn').style.display = '';
-      document.getElementById('new-team-btn').style.display = '';
-    }
-    if (!currentUser.team_id) {
-      document.getElementById('no-team-banner').style.display = '';
-    }
+    const activeOrg = userOrgs.find(o => o.id === currentOrgId);
+    const orgRole = activeOrg ? activeOrg.user_role : 'member';
+    const canManage = ['admin'].includes(currentUser.role) || ['owner', 'admin', 'team_leader'].includes(orgRole);
+    document.getElementById('new-project-btn').style.display = canManage ? '' : 'none';
+    document.getElementById('new-team-btn').style.display = canManage ? '' : 'none';
+    document.getElementById('no-team-banner').style.display = 'none';
   }
 
   document.getElementById('logout-btn').addEventListener('click', () => {
@@ -1133,6 +1306,10 @@
   async function loadDashboard() {
     const grid = document.getElementById('projects-grid');
     grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="loading-spinner"></div></div>';
+    if (!currentOrgId) {
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">🏢</div><h3>Sin organización</h3><p>Selecciona o crea una organización para ver tus proyectos.</p></div>';
+      return;
+    }
     try {
       const projects = await api('/api/projects');
       renderProjectGrid(projects);
@@ -1157,7 +1334,7 @@
         <div class="card" data-id="${p.id}" onclick="openGantt(${p.id}, '${escHtml(p.name)}')">
           <div class="card-header">
             <span class="card-title">${escHtml(p.name)}</span>
-            <span class="badge badge-${p.status}">${p.status}</span>
+            <span class="badge badge-${p.status}">${{'active':'Activo','completed':'Completado','archived':'Archivado'}[p.status]||p.status}</span>
           </div>
           <div class="card-meta">
             📅 ${p.start_date} → ${p.end_date}<br>
@@ -1174,28 +1351,44 @@
   }
 
   // New project
-  document.getElementById('new-project-btn').addEventListener('click', () => {
+  async function openNewProjectModal() {
     document.getElementById('project-id').value = '';
     document.getElementById('project-form').reset();
     document.getElementById('project-modal-title').textContent = 'Nuevo Proyecto';
     document.getElementById('project-status-group').style.display = 'none';
+    document.getElementById('project-team-group').style.display = '';
+    // Load teams for this org
+    try {
+      orgTeams = await api('/api/teams');
+    } catch { orgTeams = []; }
+    const sel = document.getElementById('project-team');
+    if (!orgTeams.length) {
+      sel.innerHTML = '<option value="">— Sin equipos. Crea uno primero —</option>';
+    } else {
+      sel.innerHTML = orgTeams.map(t => `<option value="${t.id}">${escHtml(t.name)}</option>`).join('');
+    }
     // Default dates
     const today = new Date().toISOString().slice(0,10);
     const next = new Date(Date.now() + 30*24*3600*1000).toISOString().slice(0,10);
     document.getElementById('project-start').value = today;
     document.getElementById('project-end').value = next;
     openModal('project-modal');
-  });
+  }
+
+  document.getElementById('new-project-btn').addEventListener('click', openNewProjectModal);
 
   document.getElementById('project-form').addEventListener('submit', async e => {
     e.preventDefault();
     const id = document.getElementById('project-id').value;
+    const teamId = document.getElementById('project-team').value;
+    if (!id && !teamId) return toast('Selecciona un equipo', 'error');
     const body = {
       name: document.getElementById('project-name').value,
       description: document.getElementById('project-description').value,
       start_date: document.getElementById('project-start').value,
       end_date: document.getElementById('project-end').value,
-      status: document.getElementById('project-status').value
+      status: document.getElementById('project-status').value,
+      team_id: teamId ? parseInt(teamId) : undefined
     };
     try {
       if (id) {
@@ -1231,6 +1424,7 @@
         <button class="btn btn-sm btn-secondary" onclick="openEditProject(${projectId})">✏️ Editar</button>
         <button class="btn btn-sm btn-secondary" id="zoom-out-btn">−</button>
         <button class="btn btn-sm btn-secondary" id="zoom-in-btn">+</button>
+        <button class="btn btn-sm btn-secondary" id="goto-today-btn">📍 Hoy</button>
         <button class="btn btn-sm" id="add-task-btn">+ Tarea</button>
         <button class="btn btn-sm btn-danger" onclick="deleteProject(${projectId})">🗑 Borrar</button>
       </div>
@@ -1241,6 +1435,7 @@
         </div>
         <div class="gantt-right" id="gantt-right">
           <div class="gantt-timeline-header" id="gantt-timeline-header">
+            <div class="gantt-month-row" id="header-months"></div>
             <div class="gantt-timeline-header-scroll" id="header-scroll"></div>
           </div>
           <div class="gantt-chart-body" id="gantt-chart-body">
@@ -1252,6 +1447,7 @@
     document.getElementById('add-task-btn').addEventListener('click', () => openTaskModal(null, projectId));
     document.getElementById('zoom-in-btn').addEventListener('click', () => { ganttCellWidth = Math.min(ganttCellWidth + 4, 60); renderGanttChart(); });
     document.getElementById('zoom-out-btn').addEventListener('click', () => { ganttCellWidth = Math.max(ganttCellWidth - 4, 16); renderGanttChart(); });
+    document.getElementById('goto-today-btn').addEventListener('click', scrollToToday);
 
     // Sync scroll between header and body
     const chartBody = document.getElementById('gantt-chart-body');
@@ -1262,13 +1458,29 @@
     });
   }
 
+  function scrollToToday() {
+    const { start: rangeStart } = getProjectDateRange();
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const todayIdx = dateToIndex(today, rangeStart);
+    const body = document.getElementById('gantt-chart-body');
+    if (!body) return;
+    const targetLeft = Math.max(0, todayIdx * ganttCellWidth - body.clientWidth / 2);
+    body.scrollLeft = targetLeft;
+  }
+
   async function loadGantt(projectId) {
     try {
-      // Load tasks and team members in parallel
-      [allTasks, teamMembers] = await Promise.all([
-        api(`/api/projects/${projectId}/tasks`),
-        currentUser.team_id ? api(`/api/teams/${currentUser.team_id}/members`) : Promise.resolve([])
-      ]);
+      allTasks = await api(`/api/projects/${projectId}/tasks`);
+      // Load members from project's team
+      try {
+        const proj = await api(`/api/projects/${projectId}`);
+        if (proj && proj.team_id) {
+          teamMembers = await api(`/api/teams/${proj.team_id}/members`);
+        } else {
+          teamMembers = [];
+        }
+      } catch { teamMembers = []; }
       renderGanttChart();
     } catch (e) {
       toast(e.message, 'error');
@@ -1318,17 +1530,44 @@
 
     // Render task list (left panel)
     const taskList = document.getElementById('gantt-tasks-list');
+    const totalWidth = days * ganttCellWidth;
+    const statusColors = { todo: '#6c757d', in_progress: '#3498db', done: '#2ecc71' };
     taskList.innerHTML = orderedTasks.map(task => `
       <div class="gantt-task-row ${task._isChild ? 'task-indent' : ''}"
            data-id="${task.id}" onclick="openTaskModal(${task.id}, ${currentProjectId})">
         <div class="task-color-dot" style="background:${task.color}"></div>
         <span class="task-label" title="${escHtml(task.name)}">${escHtml(task.name)}</span>
+        <div class="task-status-dot" style="background:${statusColors[task.status]||'#6c757d'}" title="${task.status}"></div>
         <span class="task-progress-text">${task.progress}%</span>
       </div>`).join('');
 
-    // Render timeline header
+    // Render month row header
+    const monthRow = document.getElementById('header-months');
+    const monthNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    let monthHtml = '';
+    let i = 0;
+    while (i < days) {
+      const d = new Date(rangeStart);
+      d.setDate(d.getDate() + i);
+      const month = d.getMonth();
+      const year = d.getFullYear();
+      let span = 0;
+      let j = i;
+      while (j < days) {
+        const dd = new Date(rangeStart);
+        dd.setDate(dd.getDate() + j);
+        if (dd.getMonth() !== month) break;
+        span++;
+        j++;
+      }
+      monthHtml += `<div class="gantt-month-cell" style="width:${span * ganttCellWidth}px">${monthNames[month]} ${year}</div>`;
+      i = j;
+    }
+    monthRow.style.width = totalWidth + 'px';
+    monthRow.innerHTML = monthHtml;
+
+    // Render timeline header (days row)
     const headerScroll = document.getElementById('header-scroll');
-    const totalWidth = days * ganttCellWidth;
     headerScroll.style.width = totalWidth + 'px';
     let headerHtml = '';
     for (let i = 0; i < days; i++) {
@@ -1545,6 +1784,7 @@
       document.getElementById('project-status').value = p.status;
       document.getElementById('project-modal-title').textContent = 'Editar Proyecto';
       document.getElementById('project-status-group').style.display = '';
+      document.getElementById('project-team-group').style.display = 'none'; // no change team when editing
       openModal('project-modal');
     } catch (e) {
       toast(e.message, 'error');
@@ -1570,50 +1810,82 @@
   async function loadTeam() {
     const container = document.getElementById('team-content');
     container.innerHTML = '<div class="empty-state"><div class="loading-spinner"></div></div>';
+    if (!currentOrgId) {
+      container.innerHTML = '<div class="empty-state"><div class="icon">🏢</div><h3>Sin organización activa</h3></div>';
+      return;
+    }
+    const activeOrg = userOrgs.find(o => o.id === currentOrgId);
+    const titleEl = document.getElementById('team-section-title');
+    if (titleEl && activeOrg) titleEl.textContent = `Equipos — ${activeOrg.name}`;
     try {
       const teams = await api('/api/teams');
+      orgTeams = teams;
       if (!teams.length) {
         container.innerHTML = `
           <div class="empty-state">
             <div class="icon">👥</div>
-            <h3>Sin equipo</h3>
-            <p>Crea un equipo o espera a que tu líder te invite.</p>
+            <h3>Sin equipos</h3>
+            <p>Crea el primer equipo de esta organización.</p>
           </div>`;
         return;
       }
-      const team = teams[0];
-      const members = await api(`/api/teams/${team.id}/members`);
-      teamMembers = members;
-      const canManage = ['admin','team_leader'].includes(currentUser.role);
 
-      container.innerHTML = `
-        <div style="margin-bottom:1.5rem">
-          <h3 style="font-size:1.1rem; margin-bottom:0.3rem">${escHtml(team.name)}</h3>
-          <p style="color:var(--text-secondary); font-size:0.87rem">Líder: ${escHtml(team.leader_name || '')}</p>
-        </div>
-        <div class="section-header" style="margin-bottom:1rem">
-          <h3 style="font-size:0.95rem; color:var(--text-secondary)">MIEMBROS</h3>
-          ${canManage ? `<button class="btn btn-sm" onclick="openModal('member-modal')">+ Invitar</button>` : ''}
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Usuario</th><th>Correo</th><th>Rol</th>${canManage ? '<th>Acciones</th>' : ''}</tr></thead>
-            <tbody>
-              ${members.map(m => `
-                <tr>
-                  <td>${escHtml(m.username)}</td>
-                  <td style="color:var(--text-secondary)">${escHtml(m.email)}</td>
-                  <td><span class="role-badge role-${m.role}">${roleLabel(m.role)}</span></td>
-                  ${canManage && m.id !== currentUser.id ? `<td><button class="btn btn-danger btn-sm" onclick="removeMember(${team.id},${m.id})">Quitar</button></td>` : (canManage ? '<td>—</td>' : '')}
-                </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>`;
+      // Render all teams with their members
+      const activeOrg = userOrgs.find(o => o.id === currentOrgId);
+      const orgRole = activeOrg ? activeOrg.user_role : 'member';
+      const canManage = ['admin'].includes(currentUser.role) || ['owner', 'admin', 'team_leader'].includes(orgRole);
 
-      // Member form team_id
-      document.getElementById('member-form').dataset.teamId = team.id;
+      let html = '';
+      for (const team of teams) {
+        const members = await api(`/api/teams/${team.id}/members`);
+        if (teams[0].id === team.id) teamMembers = members;
+        html += `
+          <div style="margin-bottom:2rem; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius); padding:1.25rem">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem">
+              <div>
+                <h3 style="font-size:1rem; font-weight:600">${escHtml(team.name)}</h3>
+                <p style="color:var(--text-secondary); font-size:0.8rem">Líder: ${escHtml(team.leader_name || '')}</p>
+              </div>
+              ${canManage ? `<div style="display:flex;gap:0.5rem">
+                <button class="btn btn-sm btn-secondary" onclick="openInviteModal(${team.id})">🔗 Link invitación</button>
+                <button class="btn btn-sm" onclick="openAddMemberModal(${team.id})">+ Miembro</button>
+              </div>` : ''}
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Usuario</th><th>Correo</th><th>Rol</th>${canManage ? '<th></th>' : ''}</tr></thead>
+                <tbody>
+                  ${members.map(m => `
+                    <tr>
+                      <td>${escHtml(m.username)}</td>
+                      <td style="color:var(--text-secondary)">${escHtml(m.email)}</td>
+                      <td><span class="role-badge role-${m.role}">${roleLabel(m.role)}</span></td>
+                      ${canManage && m.id !== currentUser.id ? `<td><button class="btn btn-danger btn-sm" onclick="removeMember(${team.id},${m.id})">Quitar</button></td>` : (canManage ? '<td>—</td>' : '')}
+                    </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>`;
+      }
+      container.innerHTML = html;
     } catch (e) {
       container.innerHTML = `<p style="color:var(--accent)">${e.message}</p>`;
+    }
+  }
+
+  function openAddMemberModal(teamId) {
+    document.getElementById('member-email').value = '';
+    document.getElementById('member-form').dataset.teamId = teamId;
+    openModal('member-modal');
+  }
+
+  async function openInviteModal(teamId) {
+    try {
+      const data = await api(`/api/teams/${teamId}/invitations`, { method: 'POST' });
+      document.getElementById('invite-link-value').value = data.inviteLink;
+      openModal('invite-link-modal');
+    } catch (e) {
+      toast(e.message, 'error');
     }
   }
 
@@ -1627,17 +1899,9 @@
     const name = document.getElementById('team-name').value.trim();
     if (!name) return;
     try {
-      const data = await api('/api/teams', { method: 'POST', body: { name } });
-      // Server returns a refreshed token with updated team_id
-      if (data.token) {
-        localStorage.setItem('token', data.token);
-      }
+      await api('/api/teams', { method: 'POST', body: { name } });
       toast('Equipo creado', 'success');
       closeModal('team-modal');
-      // Refresh user info (team_id has changed)
-      currentUser = await api('/api/auth/me');
-      document.getElementById('user-label').textContent = currentUser.username + ' · ' + roleLabel(currentUser.role);
-      document.getElementById('no-team-banner').style.display = 'none';
       loadTeam();
     } catch (e) {
       toast(e.message, 'error');
@@ -1681,10 +1945,103 @@
       <p>Nombre: <strong>${escHtml(currentUser.username)}</strong></p>
       <p>Correo: <strong>${escHtml(currentUser.email)}</strong></p>
       <p>Rol: <span class="role-badge role-${currentUser.role}">${roleLabel(currentUser.role)}</span></p>
-      <p>Equipo ID: <strong>${currentUser.team_id || '—'}</strong></p>
       <p>Miembro desde: <strong>${currentUser.created_at ? currentUser.created_at.slice(0,10) : '—'}</strong></p>
       <hr style="border-color:var(--border); margin: 1rem 0">`;
   }
+
+  // ─────────────────────────────────────────────
+  // ORGANIZATION SECTION
+  // ─────────────────────────────────────────────
+  async function loadOrgSection() {
+    const container = document.getElementById('org-content');
+    container.innerHTML = '<div class="empty-state"><div class="loading-spinner"></div></div>';
+    try {
+      userOrgs = await apiBase('/api/organizations');
+      const activeOrg = userOrgs.find(o => o.id === currentOrgId);
+      let html = `<div style="margin-bottom:1.5rem">
+        <div class="section-header">
+          <h3 style="font-size:0.95rem;color:var(--text-secondary)">MIS ORGANIZACIONES</h3>
+          <button class="btn btn-sm" onclick="openModal('create-org-modal')">+ Nueva org</button>
+        </div>
+        <div class="grid" style="margin-top:1rem">`;
+      for (const org of userOrgs) {
+        const isActive = org.id === currentOrgId;
+        html += `<div class="card" style="${isActive ? 'border-color:var(--accent)' : ''}" onclick="switchOrg(${org.id})">
+          <div class="card-header">
+            <span class="card-title">${escHtml(org.name)}</span>
+            ${isActive ? '<span class="badge badge-active">Activa</span>' : ''}
+          </div>
+          <div class="card-meta">Rol: <strong>${org.user_role}</strong></div>
+        </div>`;
+      }
+      html += `</div></div>`;
+      if (activeOrg) {
+        const members = await api('/api/organizations/current/members');
+        const isOwnerOrAdmin = ['owner','admin'].includes(activeOrg.user_role);
+        html += `<div class="section-header" style="margin-bottom:1rem">
+          <h3 style="font-size:0.95rem;color:var(--text-secondary)">MIEMBROS DE ${escHtml(activeOrg.name).toUpperCase()}</h3>
+          ${isOwnerOrAdmin ? `<button class="btn btn-sm" onclick="createOrgInvite()">🔗 Invitar a organización</button>` : ''}
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Usuario</th><th>Correo</th><th>Rol</th>${isOwnerOrAdmin ? '<th></th>' : ''}</tr></thead>
+            <tbody>${members.map(m => `<tr><td>${escHtml(m.username)}</td><td style="color:var(--text-secondary)">${escHtml(m.email)}</td><td><span class="role-badge role-${m.role}">${m.role}</span></td>${isOwnerOrAdmin && m.role !== 'owner' ? `<td><button class="btn btn-danger btn-sm" onclick="removeOrgMember(${m.id})">Quitar</button></td>` : (isOwnerOrAdmin ? '<td>—</td>' : '')}</tr>`).join('')}</tbody>
+          </table>
+        </div>`;
+      }
+      container.innerHTML = html;
+    } catch (e) {
+      container.innerHTML = `<p style="color:var(--accent)">${e.message}</p>`;
+    }
+  }
+
+  async function switchOrg(orgId) {
+    const org = userOrgs.find(o => o.id === orgId);
+    if (!org) return;
+    setActiveOrg(org);
+    setupUI();
+    toast(`Organización: ${org.name}`, 'info');
+    loadOrgSection();
+    loadDashboard();
+  }
+
+  async function createOrgInvite() {
+    try {
+      const data = await api('/api/organizations/current/invitations', { method: 'POST' });
+      document.getElementById('invite-link-value').value = data.inviteLink;
+      openModal('invite-link-modal');
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  async function removeOrgMember(userId) {
+    if (!confirm('¿Quitar a este miembro de la organización?')) return;
+    try {
+      await api(`/api/organizations/current/members/${userId}`, { method: 'DELETE' });
+      toast('Miembro removido de la organización', 'success');
+      loadOrgSection();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  document.getElementById('create-org-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = document.getElementById('create-org-name').value.trim();
+    if (!name) return;
+    try {
+      const org = await apiBase('/api/organizations', { method: 'POST', body: { name } });
+      userOrgs = await apiBase('/api/organizations');
+      closeModal('create-org-modal');
+      toast('Organización creada', 'success');
+      setActiveOrg({ ...org, user_role: 'owner' });
+      setupUI();
+      loadOrgSection();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  });
 
   document.getElementById('password-form').addEventListener('submit', async e => {
     e.preventDefault();

@@ -85,6 +85,30 @@ router.get('/current/members', async (req, res) => {
   }
 });
 
+// DELETE /api/organizations/current/members/:userId - Remove a member from the active organization
+router.delete('/current/members/:userId', async (req, res) => {
+  if (req.organization.role !== 'owner' && req.organization.role !== 'admin') {
+    return res.status(403).json({ error: 'Insufficient permissions to remove members' });
+  }
+
+  const targetUserId = parseInt(req.params.userId, 10);
+  if (isNaN(targetUserId)) return res.status(400).json({ error: 'Invalid user ID' });
+
+  try {
+    const { organizations } = getRepos();
+    // Prevent removing the owner
+    const members = await organizations.findMembers(req.organization.id);
+    const target = members.find(m => m.id === targetUserId);
+    if (!target) return res.status(404).json({ error: 'Member not found' });
+    if (target.role === 'owner') return res.status(403).json({ error: 'Cannot remove the organization owner' });
+
+    await organizations.removeMember(targetUserId, req.organization.id);
+    return res.json({ message: 'Member removed from organization' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/organizations/current/invitations - Create an invitation to the organization
 router.post('/current/invitations', async (req, res) => {
   if (req.organization.role !== 'owner' && req.organization.role !== 'admin') {

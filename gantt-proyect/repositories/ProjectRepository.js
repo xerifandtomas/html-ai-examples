@@ -42,13 +42,22 @@ class ProjectRepository {
   }
 
   async findById(id, organizationId) {
+    if (organizationId != null) {
+      return this.db.queryOne(`
+        ${this._projectCols()}
+        FROM projects p
+        LEFT JOIN teams t ON t.id = p.team_id
+        LEFT JOIN users u ON u.id = p.created_by
+        WHERE p.id = ? AND t.organization_id = ?
+      `, [id, organizationId]);
+    }
     return this.db.queryOne(`
       ${this._projectCols()}
       FROM projects p
       LEFT JOIN teams t ON t.id = p.team_id
       LEFT JOIN users u ON u.id = p.created_by
-      WHERE p.id = ? AND t.organization_id = ?
-    `, [id, organizationId]);
+      WHERE p.id = ?
+    `, [id]);
   }
 
   async create({ name, description, start_date, end_date, team_id, created_by }) {
