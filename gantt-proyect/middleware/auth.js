@@ -32,4 +32,36 @@ function requireRole(...roles) {
   };
 }
 
-module.exports = { requireAuth, requireRole, JWT_SECRET };
+async function requireOrganization(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+
+  const orgIdHeader = req.headers['x-organization-id'];
+  if (!orgIdHeader) {
+    return res.status(400).json({ error: 'X-Organization-ID header is required' });
+  }
+
+  const organizationId = parseInt(orgIdHeader, 10);
+  if (isNaN(organizationId)) {
+    return res.status(400).json({ error: 'Invalid Organization ID' });
+  }
+
+  const { getRepos } = require('../repositories');
+  const { organizations } = getRepos();
+
+  try {
+    const membership = await organizations.isUserMember(req.user.id, organizationId);
+    if (!membership) {
+      return res.status(403).json({ error: 'Access denied to this organization' });
+    }
+
+    req.organization = {
+      id: organizationId,
+      role: membership.role
+    };
+    next();
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+module.exports = { requireAuth, requireRole, requireOrganization, JWT_SECRET };

@@ -36,80 +36,80 @@ services:
     restart: unless-stopped
 
   # ── Application (MariaDB profile) ────────────────────────────────────────
-  gantt-mariadb:
-    build: .
-    profiles: [mariadb]
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - JWT_SECRET=change_this_secret_in_production
-      - DB_DRIVER=mariadb
-      - DB_HOST=mariadb
-      - DB_PORT=3306
-      - DB_USER=gantt
-      - DB_PASSWORD=gantt_password
-      - DB_NAME=gantt
-    depends_on:
-      mariadb:
-        condition: service_healthy
-    restart: unless-stopped
+  # gantt-mariadb:
+  #   build: .
+  #   profiles: [mariadb]
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - NODE_ENV=production
+  #     - JWT_SECRET=change_this_secret_in_production
+  #     - DB_DRIVER=mariadb
+  #     - DB_HOST=mariadb
+  #     - DB_PORT=3306
+  #     - DB_USER=gantt
+  #     - DB_PASSWORD=gantt_password
+  #     - DB_NAME=gantt
+  #   depends_on:
+  #     mariadb:
+  #       condition: service_healthy
+  #   restart: unless-stopped
 
-  mariadb:
-    image: mariadb:11
-    profiles: [mariadb]
-    environment:
-      - MYSQL_ROOT_PASSWORD=root_password
-      - MYSQL_DATABASE=gantt
-      - MYSQL_USER=gantt
-      - MYSQL_PASSWORD=gantt_password
-    volumes:
-      - mariadb_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+  # mariadb:
+  #   image: mariadb:11
+  #   profiles: [mariadb]
+  #   environment:
+  #     - MYSQL_ROOT_PASSWORD=root_password
+  #     - MYSQL_DATABASE=gantt
+  #     - MYSQL_USER=gantt
+  #     - MYSQL_PASSWORD=gantt_password
+  #   volumes:
+  #     - mariadb_data:/var/lib/mysql
+  #   healthcheck:
+  #     test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   restart: unless-stopped
 
   # ── Application (PostgreSQL profile) ────────────────────────────────────
-  gantt-postgres:
-    build: .
-    profiles: [postgres]
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - JWT_SECRET=change_this_secret_in_production
-      - DB_DRIVER=pg
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=gantt
-      - DB_PASSWORD=gantt_password
-      - DB_NAME=gantt
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
+  # gantt-postgres:
+  #   build: .
+  #   profiles: [postgres]
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - NODE_ENV=production
+  #     - JWT_SECRET=change_this_secret_in_production
+  #     - DB_DRIVER=pg
+  #     - DB_HOST=postgres
+  #     - DB_PORT=5432
+  #     - DB_USER=gantt
+  #     - DB_PASSWORD=gantt_password
+  #     - DB_NAME=gantt
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   restart: unless-stopped
 
-  postgres:
-    image: postgres:16-alpine
-    profiles: [postgres]
-    environment:
-      - POSTGRES_USER=gantt
-      - POSTGRES_PASSWORD=gantt_password
-      - POSTGRES_DB=gantt
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gantt -d gantt"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+  # postgres:
+  #   image: postgres:16-alpine
+  #   profiles: [postgres]
+  #   environment:
+  #     - POSTGRES_USER=gantt
+  #     - POSTGRES_PASSWORD=gantt_password
+  #     - POSTGRES_DB=gantt
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U gantt -d gantt"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   restart: unless-stopped
 
 volumes:
   gantt_data:
-  mariadb_data:
-  postgres_data:
+  # mariadb_data:
+  # postgres_data:
 

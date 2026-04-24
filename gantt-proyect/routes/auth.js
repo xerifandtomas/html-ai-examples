@@ -7,31 +7,33 @@ const { requireAuth, JWT_SECRET } = require('../middleware/auth');
 const router = express.Router();
 
 router.post('/register', async (req, res) => {
-  const { email, username, password, role } = req.body;
+  const { email, username, password } = req.body;
 
   if (!email || !username || !password) {
     return res.status(400).json({ error: 'Email, username and password are required' });
   }
 
-  const allowedRoles = ['member', 'team_leader'];
-  const userRole = allowedRoles.includes(role) ? role : 'member';
-
   try {
-    const { users } = getRepos();
+    const { users, organizations } = getRepos();
     const existing = await users.findByEmail(email);
     if (existing) {
       return res.status(409).json({ error: 'Email already registered' });
     }
 
     const hash = bcrypt.hashSync(password, 10);
-    const user = await users.create(email, username, hash, userRole);
+    const user = await users.create(email, username, hash, 'member');
+
+    // Automatically create a personal organization for the new user
+    const defaultOrgName = `${username}'s Organization`;
+    const orgId = await organizations.create(defaultOrgName, user.id);
+
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, team_id: user.team_id },
+      { id: user.id, email: user.email, role: user.role },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    return res.status(201).json({ token, user });
+    return res.status(201).json({ token, user, defaultOrganizationId: orgId });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -52,7 +54,7 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, team_id: user.team_id },
+      { id: user.id, email: user.email, role: user.role },
       JWT_SECRET,
       { expiresIn: '7d' }
     );

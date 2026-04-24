@@ -1,21 +1,20 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const { getRepos } = require('../repositories');
-const { requireAuth, JWT_SECRET } = require('../middleware/auth');
+const { requireAuth, requireOrganization } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(requireAuth);
+router.use(requireOrganization);
 
-// GET /api/teams  — admin sees all; others see own team
+// GET /api/teams — admin sees all; others see their teams
 router.get('/', async (req, res) => {
   try {
     const { teams } = getRepos();
-    if (req.user.role === 'admin') {
-      return res.json(await teams.findAll());
+    if (req.user.role === 'admin' || req.organization.role === 'owner') {
+      return res.json(await teams.findAll(req.organization.id));
     }
-    if (!req.user.team_id) return res.json([]);
-    const team = await teams.findById(req.user.team_id);
-    return res.json(team ? [team] : []);
+    const userTeams = await teams.findUserTeams(req.user.id, req.organization.id);
+    return res.json(userTeams);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -23,7 +22,7 @@ router.get('/', async (req, res) => {
 
 // POST /api/teams
 router.post('/', async (req, res) => {
-  if (!['admin', 'team_leader'].includes(req.user.role)) {
+  if (!['admin', 'team_leader', 'owner'].includes(req.organization.role) && req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Insufficient permissions' });
   }
 
@@ -31,17 +30,10 @@ router.post('/', async (req, res) => {
   if (!name) return res.status(400).json({ error: 'Team name is required' });
 
   try {
-    const { teams, users } = getRepos();
-    const teamId = await teams.createWithLeader(name, req.user.id, req.user.role);
-    const team = await teams.findById(teamId);
-    const user = await users.findById(req.user.id);
-    // Return a refreshed token so subsequent requests reflect the new team_id
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, team_id: user.team_id },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-    return res.status(201).json({ team, token });
+    const { teams } = getRepos();
+    const teamId = await teams.createWithLeader(name, req.user.id, req.organization.role, req.organization.id);
+    const team = await teams.findById(teamId, req.organization.id);
+    return res.status(201).json({ team });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -50,12 +42,14 @@ router.post('/', async (req, res) => {
 // GET /api/teams/:id/members
 router.get('/:id/members', async (req, res) => {
   const teamId = parseInt(req.params.id, 10);
-  if (req.user.role !== 'admin' && req.user.team_id !== teamId) {
+  const { teams } = getRepos();
+  const isMember = await teams.isUserMember(req.user.id, teamId);
+
+  if (req.user.role !== 'admin' && !isMember) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
   try {
-    const { teams } = getRepos();
     const members = await teams.findMembers(teamId);
     return res.json(members);
   } catch (err) {
@@ -67,19 +61,19 @@ router.get('/:id/members', async (req, res) => {
 router.post('/:id/members', async (req, res) => {
   const teamId = parseInt(req.params.id, 10);
   const { email, role } = req.body;
+  const { teams } = getRepos();
+  const isLeader = await teams.isUserTeamLeader(req.user.id, teamId);
 
-  if (!['admin', 'team_leader'].includes(req.user.role)) {
-    return res.status(403).json({ error: 'Insufficient permissions' });
+  if (req.user.role !== 'admin' && !isLeader) {
+    return res.status(403).json({ error: 'Insufficient permissions to invite members' });
   }
-  if (req.user.role === 'team_leader' && req.user.team_id !== teamId) {
-    return res.status(403).json({ error: 'Access denied to this team' });
-  }
+
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
   const memberRole = ['member', 'team_leader'].includes(role) ? role : 'member';
 
   try {
-    const { users, teams } = getRepos();
+    const { users } = getRepos();
     const user = await users.findByEmail(email);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -95,19 +89,65 @@ router.post('/:id/members', async (req, res) => {
 router.delete('/:id/members/:userId', async (req, res) => {
   const teamId = parseInt(req.params.id, 10);
   const userId = parseInt(req.params.userId, 10);
+  const { teams } = getRepos();
+  const isLeader = await teams.isUserTeamLeader(req.user.id, teamId);
 
-  if (!['admin', 'team_leader'].includes(req.user.role)) {
+  if (req.user.role !== 'admin' && !isLeader) {
     return res.status(403).json({ error: 'Insufficient permissions' });
   }
-  if (req.user.role === 'team_leader' && req.user.team_id !== teamId) {
-    return res.status(403).json({ error: 'Access denied to this team' });
+
+  if (req.user.id === userId) {
+    return res.status(400).json({ error: 'You cannot remove yourself from the team' });
   }
 
   try {
-    const { teams } = getRepos();
     await teams.removeMember(userId, teamId);
-    return res.json({ message: 'Member removed' });
+    return res.status(204).send();
   } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/teams/:id/invitations
+router.post('/:id/invitations', async (req, res) => {
+  const teamId = parseInt(req.params.id, 10);
+  const { teams } = getRepos();
+  const isLeader = await teams.isUserTeamLeader(req.user.id, teamId);
+
+  if (req.user.role !== 'admin' && !isLeader) {
+    return res.status(403).json({ error: 'Insufficient permissions to invite members' });
+  }
+
+  try {
+    const token = await teams.createInvitation(teamId, req.user.id);
+    const inviteLink = `${req.protocol}://${req.get('host')}/api/invitations/accept?token=${token}`;
+    return res.json({ inviteLink, token });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/invitations/accept?token=...
+router.get('/invitations/accept', async (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).json({ error: 'Invitation token is required' });
+
+  try {
+    const { teams } = getRepos();
+    const invitation = await teams.findInvitationByToken(token);
+
+    if (!invitation || new Date() > new Date(invitation.expires_at)) {
+      return res.status(404).json({ error: 'Invitation not found or has expired' });
+    }
+
+    await teams.addMember(req.user.id, invitation.team_id, 'member');
+    await teams.deleteInvitation(token);
+
+    return res.json({ message: `Successfully joined team ${invitation.team_id}` });
+  } catch (err) {
+    if (err.message.includes('UNIQUE constraint failed')) {
+      return res.status(409).json({ error: 'You are already a member of this team' });
+    }
     return res.status(500).json({ error: err.message });
   }
 });

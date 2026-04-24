@@ -15,7 +15,7 @@ class UserRepository {
 
   async findById(id) {
     return this.db.queryOne(
-      'SELECT id, email, username, role, team_id, created_at FROM users WHERE id = ?',
+      'SELECT id, email, username, role, created_at FROM users WHERE id = ?',
       [id]
     );
   }
@@ -30,22 +30,6 @@ class UserRepository {
 
   async updatePassword(id, hash) {
     await this.db.execute('UPDATE users SET password_hash = ? WHERE id = ?', [hash, id]);
-  }
-
-  /** Assign user to a team and set their role. */
-  async updateTeam(id, teamId, role) {
-    await this.db.execute(
-      'UPDATE users SET team_id = ?, role = ? WHERE id = ?',
-      [teamId, role, id]
-    );
-  }
-
-  /** Remove user from a team and reset their role to member. */
-  async clearTeam(id, teamId) {
-    await this.db.execute(
-      "UPDATE users SET team_id = NULL, role = 'member' WHERE id = ? AND team_id = ?",
-      [id, teamId]
-    );
   }
 }
 

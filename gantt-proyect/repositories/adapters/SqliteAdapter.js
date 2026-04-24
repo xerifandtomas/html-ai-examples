@@ -67,11 +67,36 @@ class SqliteAdapter {
   /** Creates all tables if they do not exist. */
   async init() {
     this._db.exec(`
-      CREATE TABLE IF NOT EXISTS teams (
+      CREATE TABLE IF NOT EXISTS organizations (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         name       TEXT    NOT NULL,
-        leader_id  INTEGER NOT NULL,
+        owner_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         created_at TEXT    DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS organization_members (
+        user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        role            TEXT    NOT NULL DEFAULT 'member',
+        created_at      TEXT    DEFAULT (datetime('now')),
+        PRIMARY KEY (user_id, organization_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS organization_invitations (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        created_by      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token           TEXT    UNIQUE NOT NULL,
+        expires_at      TEXT    NOT NULL,
+        created_at      TEXT    DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS teams (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        name            TEXT    NOT NULL,
+        leader_id       INTEGER NOT NULL,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        created_at      TEXT    DEFAULT (datetime('now'))
       );
 
       CREATE TABLE IF NOT EXISTS users (
@@ -80,8 +105,24 @@ class SqliteAdapter {
         username      TEXT    NOT NULL,
         password_hash TEXT    NOT NULL,
         role          TEXT    NOT NULL DEFAULT 'member',
-        team_id       INTEGER REFERENCES teams(id),
         created_at    TEXT    DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS team_members (
+        user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        team_id    INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        role       TEXT    NOT NULL DEFAULT 'member',
+        created_at TEXT    DEFAULT (datetime('now')),
+        PRIMARY KEY (user_id, team_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS team_invitations (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        team_id    INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token      TEXT    UNIQUE NOT NULL,
+        expires_at TEXT    NOT NULL,
+        created_at TEXT    DEFAULT (datetime('now'))
       );
 
       CREATE TABLE IF NOT EXISTS projects (

@@ -19,35 +19,36 @@ class ProjectRepository {
     `;
   }
 
-  async findAll(teamId) {
+  async findAll(teamId, organizationId) {
     if (teamId == null) {
-      // admin: all projects
+      // admin/owner: all projects in the organization
       return this.db.query(`
         ${this._projectCols()}
         FROM projects p
         LEFT JOIN teams t ON t.id = p.team_id
         LEFT JOIN users u ON u.id = p.created_by
+        WHERE t.organization_id = ?
         ORDER BY p.created_at DESC
-      `);
+      `, [organizationId]);
     }
     return this.db.query(`
       ${this._projectCols()}
       FROM projects p
       LEFT JOIN teams t ON t.id = p.team_id
       LEFT JOIN users u ON u.id = p.created_by
-      WHERE p.team_id = ?
+      WHERE p.team_id = ? AND t.organization_id = ?
       ORDER BY p.created_at DESC
-    `, [teamId]);
+    `, [teamId, organizationId]);
   }
 
-  async findById(id) {
+  async findById(id, organizationId) {
     return this.db.queryOne(`
       ${this._projectCols()}
       FROM projects p
       LEFT JOIN teams t ON t.id = p.team_id
       LEFT JOIN users u ON u.id = p.created_by
-      WHERE p.id = ?
-    `, [id]);
+      WHERE p.id = ? AND t.organization_id = ?
+    `, [id, organizationId]);
   }
 
   async create({ name, description, start_date, end_date, team_id, created_by }) {

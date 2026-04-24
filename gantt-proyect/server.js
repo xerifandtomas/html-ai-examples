@@ -33,6 +33,7 @@ app.use('/api/auth', authLimiter);
 app.use('/api', apiLimiter);
 
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/organizations', require('./routes/organizations'));
 app.use('/api/teams', require('./routes/teams'));
 app.use('/api/projects', require('./routes/projects'));
 

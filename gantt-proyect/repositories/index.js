@@ -20,6 +20,7 @@
 const UserRepository    = require('./UserRepository');
 const TeamRepository    = require('./TeamRepository');
 const ProjectRepository = require('./ProjectRepository');
+const OrganizationRepository = require('./OrganizationRepository');
 
 let _adapter = null;
 let _repos   = null;
@@ -59,6 +60,7 @@ function getRepos() {
       users:    new UserRepository(db),
       teams:    new TeamRepository(db),
       projects: new ProjectRepository(db),
+      organizations: new OrganizationRepository(db),
     };
   }
   return _repos;

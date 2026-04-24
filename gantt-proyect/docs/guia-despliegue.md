@@ -215,19 +215,17 @@ Los tokens expiran en **7 días**. Simplemente vuelve a iniciar sesión. Si camb
 
 ## Primer usuario administrador
 
-Por diseño, el primer usuario que se registra como "Líder de equipo" tiene ese rol. Para promover a un usuario a **admin** directamente en SQLite:
+Por diseño, el primer usuario que se registra como "Líder de equipo" tiene ese rol. Para promover a un usuario a **admin** ejecuta el script incluido en el proyecto:
 
 ```bash
-# Acceder al contenedor
-docker exec -it gantt-proyect-gantt-1 sh
+# Desde el host (ejecución local)
+node make-admin.js tu@email.com
 
-# Abrir SQLite
-sqlite3 /app/data/gantt.db
-
-# Actualizar rol
-UPDATE users SET role = 'admin' WHERE email = 'tu@email.com';
-.quit
+# Desde Docker
+docker exec -it gantt-proyect-gantt-1 node make-admin.js tu@email.com
 ```
+
+El script usa `better-sqlite3` (ya instalado) y respeta la variable `DATABASE_PATH` si la tienes configurada.
 
 ---
 
