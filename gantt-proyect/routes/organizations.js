@@ -1,6 +1,8 @@
 const express = require('express');
 const { getRepos } = require('../repositories');
 const { requireAuth, requireOrganization } = require('../middleware/auth');
+const { checkLimit } = require('../middleware/tierLimits');
+const { getPlanLimitsJSON, UPGRADE_PATH, PLAN_LABELS } = require('../config/tiers');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -110,7 +112,7 @@ router.delete('/current/members/:userId', async (req, res) => {
 });
 
 // POST /api/organizations/current/invitations - Create an invitation to the organization
-router.post('/current/invitations', async (req, res) => {
+router.post('/current/invitations', checkLimit('invite_links'), async (req, res) => {
   if (req.organization.role !== 'owner' && req.organization.role !== 'admin') {
     return res.status(403).json({ error: 'Insufficient permissions to invite members' });
   }
@@ -120,6 +122,24 @@ router.post('/current/invitations', async (req, res) => {
     const token = await organizations.createInvitation(req.organization.id, req.user.id);
     const inviteLink = `${req.protocol}://${req.get('host')}/api/organizations/invitations/accept?token=${token}`;
     return res.json({ inviteLink, token });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/organizations/current/plan — returns plan, limits, and current usage
+router.get('/current/plan', async (req, res) => {
+  try {
+    const { subscriptions } = getRepos();
+    const plan = await subscriptions.getOrgPlan(req.organization.id);
+    const usage = await subscriptions.getOrgUsage(req.organization.id);
+    return res.json({
+      plan,
+      label: PLAN_LABELS[plan] || plan,
+      limits: getPlanLimitsJSON(plan),
+      upgrade_to: UPGRADE_PATH[plan] || null,
+      usage,
+    });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

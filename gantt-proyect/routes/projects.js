@@ -1,6 +1,7 @@
 const express = require('express');
 const { getRepos } = require('../repositories');
 const { requireAuth, requireOrganization } = require('../middleware/auth');
+const { checkLimit } = require('../middleware/tierLimits');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -35,7 +36,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/projects
-router.post('/', async (req, res) => {
+router.post('/', checkLimit('projects'), async (req, res) => {
   if (!['admin', 'team_leader', 'owner'].includes(req.organization.role) && req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Insufficient permissions' });
   }
@@ -138,7 +139,7 @@ router.get('/:id/tasks', async (req, res) => {
 });
 
 // POST /api/projects/:id/tasks
-router.post('/:id/tasks', async (req, res) => {
+router.post('/:id/tasks', checkLimit('tasks'), checkLimit('subtasks'), async (req, res) => {
   try {
     const { projects } = getRepos();
     const project = await projects.findById(req.params.id, req.organization.id);
@@ -151,7 +152,7 @@ router.post('/:id/tasks', async (req, res) => {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
-    const { name, description, start_date, end_date, progress, color, parent_id, assigned_to, sort_order } = req.body;
+    const { name, description, start_date, end_date, progress, color, parent_id, assigned_to, assignees, sort_order, estimated_hours } = req.body;
     if (!name || !start_date || !end_date) {
       return res.status(400).json({ error: 'name, start_date, and end_date are required' });
     }
@@ -161,8 +162,10 @@ router.post('/:id/tasks', async (req, res) => {
       name, description, start_date, end_date, progress, color,
       parent_id:   parent_id   ?? null,
       assigned_to: assigned_to ?? null,
+      assignees:   Array.isArray(assignees) ? assignees.filter(Boolean) : [],
       created_by:  req.user.id,
       sort_order,
+      estimated_hours: estimated_hours || 0,
     });
     return res.status(201).json(task);
   } catch (err) {
@@ -189,10 +192,13 @@ router.put('/:id/tasks/:taskId', async (req, res) => {
       return res.status(403).json({ error: 'You can only update tasks assigned to you' });
     }
 
-    const { name, description, start_date, end_date, progress, color, parent_id, assigned_to, status, sort_order } = req.body;
+    const { name, description, start_date, end_date, progress, color, parent_id, assigned_to, assignees, status, sort_order, estimated_hours } = req.body;
     const updated = await projects.updateTask(req.params.taskId, {
       name, description, start_date, end_date, progress, color,
-      parent_id, assigned_to, status, sort_order,
+      parent_id, assigned_to,
+      assignees: assignees !== undefined ? (Array.isArray(assignees) ? assignees.filter(Boolean) : []) : undefined,
+      status, sort_order,
+      estimated_hours: estimated_hours !== undefined ? (estimated_hours || 0) : undefined,
     });
     return res.json(updated);
   } catch (err) {

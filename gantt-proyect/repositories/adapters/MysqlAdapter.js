@@ -141,6 +141,19 @@ class MysqlAdapter {
           FOREIGN KEY (created_by)  REFERENCES users(id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
       `);
+      // Idempotent migrations
+      try { await conn.query("ALTER TABLE organizations ADD COLUMN plan VARCHAR(20) NOT NULL DEFAULT 'free'"); } catch {}
+      try { await conn.query('ALTER TABLE tasks ADD COLUMN estimated_hours INT NOT NULL DEFAULT 0'); } catch {}
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS plan_history (
+          id              INT AUTO_INCREMENT PRIMARY KEY,
+          organization_id INT     NOT NULL,
+          plan            VARCHAR(20) NOT NULL,
+          changed_by      INT,
+          changed_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
       console.log('[DB] MySQL/MariaDB schema ready.');
     } finally {
       conn.release();

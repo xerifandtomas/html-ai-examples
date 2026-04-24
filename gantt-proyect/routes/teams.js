@@ -1,6 +1,7 @@
 const express = require('express');
 const { getRepos } = require('../repositories');
 const { requireAuth, requireOrganization } = require('../middleware/auth');
+const { checkLimit } = require('../middleware/tierLimits');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -21,7 +22,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/teams
-router.post('/', async (req, res) => {
+router.post('/', checkLimit('teams'), async (req, res) => {
   if (!['admin', 'team_leader', 'owner'].includes(req.organization.role) && req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Insufficient permissions' });
   }
@@ -58,7 +59,7 @@ router.get('/:id/members', async (req, res) => {
 });
 
 // POST /api/teams/:id/members  — add by email
-router.post('/:id/members', async (req, res) => {
+router.post('/:id/members', checkLimit('team_members'), async (req, res) => {
   const teamId = parseInt(req.params.id, 10);
   const { email, role } = req.body;
   const { teams } = getRepos();

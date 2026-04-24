@@ -92,13 +92,33 @@ class ProjectRepository {
   // ─── Tasks ────────────────────────────────────────────────────────────────────
 
   async findTasksByProject(projectId) {
-    return this.db.query(`
-      SELECT t.*, u.username AS assigned_to_name, u.email AS assigned_to_email
+    const tasks = await this.db.query(`
+      SELECT t.*, u.username AS assigned_to_name, u.email AS assigned_to_email,
+        (SELECT GROUP_CONCAT(ta.user_id || ':' || au.username, '|')
+         FROM task_assignees ta JOIN users au ON au.id = ta.user_id
+         WHERE ta.task_id = t.id) AS _assignees_raw
       FROM tasks t
       LEFT JOIN users u ON u.id = t.assigned_to
       WHERE t.project_id = ?
       ORDER BY t.sort_order ASC, t.id ASC
     `, [projectId]);
+    return tasks.map(t => {
+      const raw = t._assignees_raw;
+      delete t._assignees_raw;
+      t.assignees = raw
+        ? raw.split('|').map(s => { const [id, name] = s.split(':'); return { id: parseInt(id), name }; })
+        : (t.assigned_to ? [{ id: t.assigned_to, name: t.assigned_to_name }] : []);
+      return t;
+    });
+  }
+
+  async syncTaskAssignees(taskId, assigneeIds) {
+    await this.db.execute('DELETE FROM task_assignees WHERE task_id = ?', [taskId]);
+    for (const uid of (assigneeIds || [])) {
+      if (uid) {
+        try { await this.db.execute('INSERT OR IGNORE INTO task_assignees (task_id, user_id) VALUES (?, ?)', [taskId, uid]); } catch {}
+      }
+    }
   }
 
   async findTaskById(taskId, projectId) {
@@ -108,60 +128,68 @@ class ProjectRepository {
     );
   }
 
-  async createTask({ project_id, name, description, start_date, end_date, progress, color, parent_id, assigned_to, created_by, sort_order }) {
+  async createTask({ project_id, name, description, start_date, end_date, progress, color, parent_id, assigned_to, assignees, created_by, sort_order, estimated_hours }) {
+    const primaryAssignee = assignees?.length ? assignees[0] : (assigned_to ?? null);
     const id = await this.db.insert(`
       INSERT INTO tasks
-        (project_id, name, description, start_date, end_date, progress, color, parent_id, assigned_to, created_by, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (project_id, name, description, start_date, end_date, progress, color, parent_id, assigned_to, created_by, sort_order, estimated_hours)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       project_id, name, description || '', start_date, end_date,
       progress || 0, color || '#e94560',
-      parent_id   ?? null,
-      assigned_to ?? null,
+      parent_id ?? null,
+      primaryAssignee,
       created_by,
-      sort_order  || 0
+      sort_order || 0,
+      estimated_hours || 0
     ]);
-    return this.db.queryOne(`
-      SELECT t.*, u.username AS assigned_to_name
-      FROM tasks t
-      LEFT JOIN users u ON u.id = t.assigned_to
-      WHERE t.id = ?
-    `, [id]);
+    const effectiveAssignees = assignees?.length ? assignees : (primaryAssignee ? [primaryAssignee] : []);
+    await this.syncTaskAssignees(id, effectiveAssignees);
+    const tasks = await this.findTasksByProject(project_id);
+    return tasks.find(t => t.id === id) || null;
   }
 
-  async updateTask(taskId, { name, description, start_date, end_date, progress, color, parent_id, assigned_to, status, sort_order }) {
+  async updateTask(taskId, { name, description, start_date, end_date, progress, color, parent_id, assigned_to, assignees, status, sort_order, estimated_hours }) {
+    // Normalize legacy status values
+    const statusNorm = { pending: 'todo', completed: 'done' };
+    const normStatus = status ? (statusNorm[status] || status) : null;
+    const primaryAssignee = assignees?.length ? assignees[0] : (assigned_to ?? null);
     await this.db.execute(`
       UPDATE tasks SET
-        name        = COALESCE(?, name),
-        description = COALESCE(?, description),
-        start_date  = COALESCE(?, start_date),
-        end_date    = COALESCE(?, end_date),
-        progress    = COALESCE(?, progress),
-        color       = COALESCE(?, color),
-        parent_id   = COALESCE(?, parent_id),
-        assigned_to = COALESCE(?, assigned_to),
-        status      = COALESCE(?, status),
-        sort_order  = COALESCE(?, sort_order)
+        name             = COALESCE(?, name),
+        description      = COALESCE(?, description),
+        start_date       = COALESCE(?, start_date),
+        end_date         = COALESCE(?, end_date),
+        progress         = COALESCE(?, progress),
+        color            = COALESCE(?, color),
+        parent_id        = COALESCE(?, parent_id),
+        assigned_to      = COALESCE(?, assigned_to),
+        status           = COALESCE(?, status),
+        sort_order       = COALESCE(?, sort_order),
+        estimated_hours  = COALESCE(?, estimated_hours)
       WHERE id = ?
     `, [
-      name        ?? null,
-      description ?? null,
-      start_date  ?? null,
-      end_date    ?? null,
-      progress    ?? null,
-      color       ?? null,
-      parent_id   ?? null,
-      assigned_to ?? null,
-      status      ?? null,
-      sort_order  ?? null,
+      name             ?? null,
+      description      ?? null,
+      start_date       ?? null,
+      end_date         ?? null,
+      progress         ?? null,
+      color            ?? null,
+      parent_id        ?? null,
+      primaryAssignee  ?? null,
+      normStatus,
+      sort_order       ?? null,
+      estimated_hours  ?? null,
       taskId
     ]);
-    return this.db.queryOne(`
-      SELECT t.*, u.username AS assigned_to_name
-      FROM tasks t
-      LEFT JOIN users u ON u.id = t.assigned_to
-      WHERE t.id = ?
-    `, [taskId]);
+    if (assignees !== undefined) {
+      const effectiveAssignees = assignees?.length ? assignees : (primaryAssignee ? [primaryAssignee] : []);
+      await this.syncTaskAssignees(taskId, effectiveAssignees);
+    }
+    const task = await this.db.queryOne('SELECT project_id FROM tasks WHERE id = ?', [taskId]);
+    if (!task) return null;
+    const tasks = await this.findTasksByProject(task.project_id);
+    return tasks.find(t => t.id == taskId) || null;
   }
 
   /** Deletes a task and all its child tasks atomically. */

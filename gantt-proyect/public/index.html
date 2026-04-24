@@ -219,28 +219,16 @@
         <div class="success-msg" id="reg-success"></div>
         <form id="reg-form" novalidate>
           <div class="form-group">
+            <label for="reg-username">Nombre</label>
+            <input type="text" id="reg-username" placeholder="Tu nombre" required autocomplete="name">
+          </div>
+          <div class="form-group">
             <label for="reg-email">Correo electrónico</label>
-            <input type="email" id="reg-email" placeholder="correo@ejemplo.com" required>
-          </div>
-          <div class="form-group">
-            <label for="reg-username">Nombre de usuario</label>
-            <input type="text" id="reg-username" placeholder="Tu nombre" required>
-          </div>
-          <div class="form-group">
-            <label for="reg-role">Rol</label>
-            <select id="reg-role">
-              <option value="member">Miembro del equipo</option>
-              <option value="team_leader">Líder de equipo</option>
-            </select>
-            <p class="hint">Los líderes pueden crear equipos y proyectos.</p>
+            <input type="email" id="reg-email" placeholder="correo@ejemplo.com" required autocomplete="email">
           </div>
           <div class="form-group">
             <label for="reg-password">Contraseña</label>
-            <input type="password" id="reg-password" placeholder="Mínimo 6 caracteres" required>
-          </div>
-          <div class="form-group">
-            <label for="reg-confirm">Confirmar contraseña</label>
-            <input type="password" id="reg-confirm" placeholder="Repite tu contraseña" required>
+            <input type="password" id="reg-password" placeholder="Mínimo 6 caracteres" required autocomplete="new-password">
           </div>
           <button type="submit" class="btn" id="reg-btn">Crear cuenta</button>
         </form>
@@ -319,20 +307,15 @@
       hideError('reg-error');
       document.getElementById('reg-success').classList.remove('visible');
 
-      const email = document.getElementById('reg-email').value.trim();
       const username = document.getElementById('reg-username').value.trim();
-      const role = document.getElementById('reg-role').value;
+      const email = document.getElementById('reg-email').value.trim();
       const password = document.getElementById('reg-password').value;
-      const confirm = document.getElementById('reg-confirm').value;
 
-      if (!email || !username || !password || !confirm) {
+      if (!username || !email || !password) {
         return showError('reg-error', 'Por favor completa todos los campos.');
       }
       if (password.length < 6) {
         return showError('reg-error', 'La contraseña debe tener al menos 6 caracteres.');
-      }
-      if (password !== confirm) {
-        return showError('reg-error', 'Las contraseñas no coinciden.');
       }
 
       const btn = document.getElementById('reg-btn');
@@ -343,7 +326,7 @@
         const res = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, username, password, role })
+          body: JSON.stringify({ email, username, password, role: 'member' })
         });
         const data = await res.json();
         if (!res.ok) {

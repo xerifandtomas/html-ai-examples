@@ -21,6 +21,7 @@ const UserRepository    = require('./UserRepository');
 const TeamRepository    = require('./TeamRepository');
 const ProjectRepository = require('./ProjectRepository');
 const OrganizationRepository = require('./OrganizationRepository');
+const SubscriptionRepository = require('./SubscriptionRepository');
 
 let _adapter = null;
 let _repos   = null;
@@ -61,6 +62,7 @@ function getRepos() {
       teams:    new TeamRepository(db),
       projects: new ProjectRepository(db),
       organizations: new OrganizationRepository(db),
+      subscriptions: new SubscriptionRepository(db),
     };
   }
   return _repos;

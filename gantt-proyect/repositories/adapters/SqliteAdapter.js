@@ -149,9 +149,29 @@ class SqliteAdapter {
         parent_id   INTEGER REFERENCES tasks(id),
         assigned_to INTEGER REFERENCES users(id),
         created_by  INTEGER NOT NULL REFERENCES users(id),
-        status      TEXT    NOT NULL DEFAULT 'pending',
+        status      TEXT    NOT NULL DEFAULT 'todo',
         sort_order  INTEGER NOT NULL DEFAULT 0,
         created_at  TEXT    DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS task_assignees (
+        task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        PRIMARY KEY (task_id, user_id)
+      );
+    `);
+    // Add estimated_hours column if not present (idempotent migration)
+    try { this._db.prepare('ALTER TABLE tasks ADD COLUMN estimated_hours INTEGER NOT NULL DEFAULT 0').run(); } catch {}
+    // Add plan column to organizations (idempotent migration)
+    try { this._db.prepare("ALTER TABLE organizations ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'").run(); } catch {}
+    // Plan history table
+    this._db.exec(`
+      CREATE TABLE IF NOT EXISTS plan_history (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        plan            TEXT    NOT NULL,
+        changed_by      INTEGER REFERENCES users(id),
+        changed_at      TEXT    DEFAULT (datetime('now'))
       );
     `);
     console.log('[DB] SQLite schema ready.');

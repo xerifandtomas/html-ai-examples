@@ -155,6 +155,18 @@ class PgAdapter {
         created_at  TIMESTAMPTZ DEFAULT NOW()
       );
     `);
+    // Idempotent migrations
+    try { await this._pool.query("ALTER TABLE organizations ADD COLUMN plan VARCHAR(20) NOT NULL DEFAULT 'free'"); } catch {}
+    try { await this._pool.query('ALTER TABLE tasks ADD COLUMN estimated_hours INTEGER NOT NULL DEFAULT 0'); } catch {}
+    await this._pool.query(`
+      CREATE TABLE IF NOT EXISTS plan_history (
+        id              SERIAL      PRIMARY KEY,
+        organization_id INTEGER     NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        plan            VARCHAR(20) NOT NULL,
+        changed_by      INTEGER     REFERENCES users(id),
+        changed_at      TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
     console.log('[DB] PostgreSQL schema ready.');
   }
 
