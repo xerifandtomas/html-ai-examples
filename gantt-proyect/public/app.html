@@ -1003,6 +1003,8 @@
       flex-wrap: wrap;
     }
     .tree-org-name { font-weight: 600; font-size: 0.95rem; }
+    .org-name-selectable { cursor: pointer; text-decoration: underline dotted; color: var(--text-primary); transition: color var(--transition); }
+    .org-name-selectable:hover { color: var(--accent-hover); }
     .tree-org-body {
       padding: 0 0.75rem 0.75rem 2rem;
       display: flex;
@@ -1822,12 +1824,12 @@
     return `<div class="tree-org ${isActive ? 'active' : ''}">
       <div class="tree-org-header">
         <span>🏢</span>
-        <span class="tree-org-name">${escHtml(org.name)}</span>
+        <span class="tree-org-name ${!isActive ? 'org-name-selectable' : ''}"
+          ${!isActive ? `onclick="switchOrg(${org.id})" title="Clic para activar esta organización"` : ''}
+        >${escHtml(org.name)}</span>
         <span class="plan-badge ${planClass}" style="font-size:0.65rem;padding:0.12rem 0.38rem">${planLabel}</span>
         ${isActive ? '<span class="badge badge-active" style="font-size:0.68rem">Activa</span>' : ''}
         <div style="flex:1"></div>
-        ${!isActive ? `<button class="btn btn-sm btn-secondary" style="font-size:0.7rem;padding:0.15rem 0.45rem"
-          onclick="switchOrg(${org.id})">Activar</button>` : ''}
         <button class="btn btn-sm btn-secondary" style="font-size:0.7rem;padding:0.15rem 0.45rem;margin-left:0.35rem"
           onclick="openOrgMembersPanel(${org.id},event)">👥 Miembros</button>
       </div>
