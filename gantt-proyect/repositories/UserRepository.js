@@ -1,8 +1,7 @@
 'use strict';
 
 /**
- * UserRepository — all user-related DB operations.
- * Uses the injected adapter so the same code works with SQLite, MySQL, and PostgreSQL.
+ * UserRepository - all user-related DB operations.
  */
 class UserRepository {
   constructor(adapter) {

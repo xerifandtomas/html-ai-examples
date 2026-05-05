@@ -1,9 +1,19 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const { getRepos } = require('../repositories');
 const { requireAuth, requireOrganization } = require('../middleware/auth');
 const { checkLimit } = require('../middleware/tierLimits');
 
 const router = express.Router();
+
+const invitationAcceptLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' }
+});
+
 router.use(requireAuth);
 router.use(requireOrganization);
 
@@ -17,7 +27,7 @@ router.get('/', async (req, res) => {
     const userTeams = await teams.findUserTeams(req.user.id, req.organization.id);
     return res.json(userTeams);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -36,7 +46,7 @@ router.post('/', checkLimit('teams'), async (req, res) => {
     const team = await teams.findById(teamId, req.organization.id);
     return res.status(201).json({ team });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -54,7 +64,7 @@ router.get('/:id/members', async (req, res) => {
     const members = await teams.findMembers(teamId);
     return res.json(members);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -82,7 +92,7 @@ router.post('/:id/members', checkLimit('team_members'), async (req, res) => {
     const updated = await users.findById(user.id);
     return res.json(updated);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -105,12 +115,12 @@ router.delete('/:id/members/:userId', async (req, res) => {
     await teams.removeMember(userId, teamId);
     return res.status(204).send();
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // POST /api/teams/:id/invitations
-router.post('/:id/invitations', async (req, res) => {
+router.post('/:id/invitations', checkLimit('invite_links'), async (req, res) => {
   const teamId = parseInt(req.params.id, 10);
   const { teams } = getRepos();
   const isLeader = await teams.isUserTeamLeader(req.user.id, teamId);
@@ -121,15 +131,15 @@ router.post('/:id/invitations', async (req, res) => {
 
   try {
     const token = await teams.createInvitation(teamId, req.user.id);
-    const inviteLink = `${req.protocol}://${req.get('host')}/api/invitations/accept?token=${token}`;
+    const inviteLink = `${req.protocol}://${req.get('host')}/api/teams/invitations/accept?token=${token}`;
     return res.json({ inviteLink, token });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // GET /api/invitations/accept?token=...
-router.get('/invitations/accept', async (req, res) => {
+router.get('/invitations/accept', invitationAcceptLimiter, async (req, res) => {
   const { token } = req.query;
   if (!token) return res.status(400).json({ error: 'Invitation token is required' });
 
@@ -146,10 +156,13 @@ router.get('/invitations/accept', async (req, res) => {
 
     return res.json({ message: `Successfully joined team ${invitation.team_id}` });
   } catch (err) {
-    if (err.message.includes('UNIQUE constraint failed')) {
+    if (
+      err.message.includes('duplicate key') ||
+      err.message.includes('UNIQUE constraint failed')
+    ) {
       return res.status(409).json({ error: 'You are already a member of this team' });
     }
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

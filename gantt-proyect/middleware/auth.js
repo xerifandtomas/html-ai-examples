@@ -1,12 +1,15 @@
 const jwt = require('jsonwebtoken');
 
+/** @typedef {{user: {id: number, email: string, role: string}, organization?: {id: number, role: string}}} AuthRequest */
+
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 
-if (process.env.NODE_ENV === 'production' && JWT_SECRET === 'dev_secret_change_in_production') {
+if (JWT_SECRET === 'dev_secret_change_in_production') {
   console.error('FATAL: JWT_SECRET is not set. Set a strong secret in the JWT_SECRET environment variable.');
   process.exit(1);
 }
 
+/** @param {any} req @param {any} res @param {any} next */
 function requireAuth(req, res, next) {
   const header = req.headers['authorization'];
   if (!header || !header.startsWith('Bearer ')) {
@@ -22,7 +25,9 @@ function requireAuth(req, res, next) {
   }
 }
 
+/** @param {...string} roles */
 function requireRole(...roles) {
+  /** @param {any} req @param {any} res @param {any} next */
   return (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
     if (!roles.includes(req.user.role)) {
@@ -32,6 +37,7 @@ function requireRole(...roles) {
   };
 }
 
+/** @param {any} req @param {any} res @param {any} next */
 async function requireOrganization(req, res, next) {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
 
@@ -60,7 +66,8 @@ async function requireOrganization(req, res, next) {
     };
     next();
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error('[auth.requireOrganization]', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 

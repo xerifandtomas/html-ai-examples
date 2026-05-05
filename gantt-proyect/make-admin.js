@@ -1,58 +1,64 @@
 'use strict';
 
 /**
- * make-admin.js — Promueve un usuario existente al rol 'admin'.
+ * make-admin.js - Promote an existing user to the global 'admin' role.
  *
- * Uso:
+ * Usage:
  *   node make-admin.js <email>
- *
- * Ejemplos:
- *   node make-admin.js tu@email.com
- *   DATABASE_PATH=/app/data/gantt.db node make-admin.js tu@email.com
  */
 
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
+const { Pool } = require('pg');
 
 const email = process.argv[2];
 
 if (!email || !email.includes('@')) {
-  console.error('Uso: node make-admin.js <email>');
+  console.error('Usage: node make-admin.js <email>');
   process.exit(1);
 }
 
-const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'data', 'gantt.db');
+async function main() {
+  const pool = new Pool({
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    user: process.env.DB_USER || 'gantt',
+    password: process.env.DB_PASSWORD || 'gantt',
+    database: process.env.DB_NAME || 'gantt',
+  });
 
-if (!fs.existsSync(dbPath)) {
-  console.error(`Base de datos no encontrada en: ${dbPath}`);
-  console.error('Verifica la ruta o define DATABASE_PATH.');
+  try {
+    const userResult = await pool.query(
+      'SELECT id, email, username, role FROM users WHERE email = $1',
+      [email]
+    );
+
+    const user = userResult.rows[0];
+    if (!user) {
+      console.error(`No user found with email: ${email}`);
+      process.exit(1);
+    }
+
+    if (user.role === 'admin') {
+      console.log(`User "${user.username}" (${email}) is already admin.`);
+      process.exit(0);
+    }
+
+    const updateResult = await pool.query(
+      "UPDATE users SET role = 'admin' WHERE email = $1",
+      [email]
+    );
+
+    if ((updateResult.rowCount || 0) === 0) {
+      console.error('No changes made. Verify email and try again.');
+      process.exit(1);
+    }
+
+    console.log(`Done. User "${user.username}" (${email}) promoted to admin.`);
+  } finally {
+    await pool.end();
+  }
+}
+
+main().catch((err) => {
+  console.error('Failed to promote user:', err.message);
   process.exit(1);
-}
-
-const db = new Database(dbPath);
-
-const user = db.prepare('SELECT id, email, username, role FROM users WHERE email = ?').get(email);
-
-if (!user) {
-  console.error(`No se encontró ningún usuario con email: ${email}`);
-  db.close();
-  process.exit(1);
-}
-
-if (user.role === 'admin') {
-  console.log(`El usuario "${user.username}" (${email}) ya tiene rol admin.`);
-  db.close();
-  process.exit(0);
-}
-
-const result = db.prepare("UPDATE users SET role = 'admin' WHERE email = ?").run(email);
-
-if (result.changes === 0) {
-  console.error('No se realizaron cambios. Comprueba el email e inténtalo de nuevo.');
-  db.close();
-  process.exit(1);
-}
-
-console.log(`Listo. Usuario "${user.username}" (${email}) promovido a admin.`);
-db.close();
+});

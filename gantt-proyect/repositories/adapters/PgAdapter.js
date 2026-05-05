@@ -1,12 +1,13 @@
 'use strict';
 
-const { Pool } = require('pg');
+const { Pool }        = require('pg');
+const MigrationRunner = require('../MigrationRunner');
 
 /**
  * Adapter for PostgreSQL using the `pg` connection pool.
  *
- * Key differences from SQLite/MySQL that this adapter handles internally:
- *   1. Positional parameters ($1, $2, …) instead of `?` placeholders.
+ * Key PostgreSQL behavior handled by this adapter:
+ *   1. Positional parameters ($1, $2, ...) instead of `?` placeholders.
  *   2. INSERT must include `RETURNING id` to retrieve the generated PK.
  *   3. Connection-level transaction management.
  *
@@ -32,6 +33,7 @@ class PgAdapter {
   /**
    * Converts `?` placeholders to PostgreSQL positional `$N` parameters.
    * e.g. "WHERE id = ? AND role = ?" → "WHERE id = $1 AND role = $2"
+    * @param {string} sql
    */
   _toPositional(sql) {
     let i = 0;
@@ -39,26 +41,31 @@ class PgAdapter {
   }
 
   /** Returns all matching rows. */
+  /** @param {string} sql @param {unknown[]} [params=[]] */
   async query(sql, params = []) {
     const { rows } = await this._pool.query(this._toPositional(sql), params);
     return rows;
   }
 
   /** Returns the first matching row or null. */
+  /** @param {string} sql @param {unknown[]} [params=[]] */
   async queryOne(sql, params = []) {
     const { rows } = await this._pool.query(this._toPositional(sql), params);
     return rows[0] ?? null;
   }
 
   /** Executes a non-SELECT statement. Returns { changes }. */
+  /** @param {string} sql @param {unknown[]} [params=[]] */
   async execute(sql, params = []) {
     const result = await this._pool.query(this._toPositional(sql), params);
-    return { changes: result.rowCount };
+    return { changes: result.rowCount || 0 };
   }
 
   /**
    * Executes an INSERT statement and returns the new row's id.
    * Appends `RETURNING id` automatically if not present.
+  * @param {string} sql
+  * @param {unknown[]} [params=[]]
    */
   async insert(sql, params = []) {
     const baseSql = sql.replace(/;\s*$/, '');
@@ -66,28 +73,39 @@ class PgAdapter {
       ? this._toPositional(baseSql)
       : this._toPositional(`${baseSql} RETURNING id`);
     const { rows } = await this._pool.query(pgSql, params);
-    return rows[0].id;
+    const insertRows = /** @type {{id: number}[]} */ (rows);
+    if (!insertRows[0] || insertRows[0].id == null) {
+      throw new Error('INSERT did not return an id. Ensure SQL includes RETURNING id.');
+    }
+    return insertRows[0].id;
   }
 
   /**
    * Runs `fn(txAdapter)` inside a BEGIN/COMMIT/ROLLBACK block on a
    * dedicated client so the transaction is properly isolated.
+   * @param {any} fn
    */
   async transaction(fn) {
     const client = await this._pool.connect();
     const self = this;
+    /** @type {any} */
     const txAdapter = {
-      query:    async (sql, params = []) => { const { rows }   = await client.query(self._toPositional(sql), params); return rows; },
-      queryOne: async (sql, params = []) => { const { rows }   = await client.query(self._toPositional(sql), params); return rows[0] ?? null; },
-      execute:  async (sql, params = []) => { const result     = await client.query(self._toPositional(sql), params); return { changes: result.rowCount }; },
-      insert:   async (sql, params = []) => {
+      query:    async (/** @type {string} */ sql, /** @type {unknown[]} */ params = []) => { const { rows }   = await client.query(self._toPositional(sql), params); return rows; },
+      queryOne: async (/** @type {string} */ sql, /** @type {unknown[]} */ params = []) => { const { rows }   = await client.query(self._toPositional(sql), params); return rows[0] ?? null; },
+      execute:  async (/** @type {string} */ sql, /** @type {unknown[]} */ params = []) => { const result     = await client.query(self._toPositional(sql), params); return { changes: result.rowCount || 0 }; },
+      insert:   async (/** @type {string} */ sql, /** @type {unknown[]} */ params = []) => {
         const baseSql = sql.replace(/;\s*$/, '');
         const pgSql = /RETURNING\s+/i.test(baseSql)
           ? self._toPositional(baseSql)
           : self._toPositional(`${baseSql} RETURNING id`);
         const { rows } = await client.query(pgSql, params);
-        return rows[0].id;
+        const insertRows = /** @type {{id: number}[]} */ (rows);
+        if (!insertRows[0] || insertRows[0].id == null) {
+          throw new Error('INSERT did not return an id. Ensure SQL includes RETURNING id.');
+        }
+        return insertRows[0].id;
       },
+      /** @param {(txAdapter: unknown) => Promise<unknown>} innerFn */
       transaction: (innerFn) => innerFn(txAdapter), // reuse same client
     };
     try {
@@ -103,70 +121,9 @@ class PgAdapter {
     }
   }
 
-  /** Creates all tables if they do not exist. */
+  /** Runs all pending migrations and creates tables if they do not exist. */
   async init() {
-    await this._pool.query(`
-      CREATE TABLE IF NOT EXISTS teams (
-        id         SERIAL      PRIMARY KEY,
-        name       VARCHAR(255) NOT NULL,
-        leader_id  INTEGER      NOT NULL,
-        created_at TIMESTAMPTZ  DEFAULT NOW()
-      );
-    `);
-    await this._pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id            SERIAL       PRIMARY KEY,
-        email         VARCHAR(255) UNIQUE NOT NULL,
-        username      VARCHAR(255) NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        role          VARCHAR(50)  NOT NULL DEFAULT 'member',
-        team_id       INTEGER      REFERENCES teams(id),
-        created_at    TIMESTAMPTZ  DEFAULT NOW()
-      );
-    `);
-    await this._pool.query(`
-      CREATE TABLE IF NOT EXISTS projects (
-        id          SERIAL       PRIMARY KEY,
-        name        VARCHAR(255) NOT NULL,
-        description TEXT         DEFAULT '',
-        start_date  DATE         NOT NULL,
-        end_date    DATE         NOT NULL,
-        team_id     INTEGER      NOT NULL REFERENCES teams(id),
-        created_by  INTEGER      NOT NULL REFERENCES users(id),
-        status      VARCHAR(50)  NOT NULL DEFAULT 'active',
-        created_at  TIMESTAMPTZ  DEFAULT NOW()
-      );
-    `);
-    await this._pool.query(`
-      CREATE TABLE IF NOT EXISTS tasks (
-        id          SERIAL      PRIMARY KEY,
-        project_id  INTEGER     NOT NULL REFERENCES projects(id),
-        name        VARCHAR(255) NOT NULL,
-        description TEXT        DEFAULT '',
-        start_date  DATE        NOT NULL,
-        end_date    DATE        NOT NULL,
-        progress    INTEGER     NOT NULL DEFAULT 0,
-        color       VARCHAR(20) NOT NULL DEFAULT '#e94560',
-        parent_id   INTEGER     REFERENCES tasks(id),
-        assigned_to INTEGER     REFERENCES users(id),
-        created_by  INTEGER     NOT NULL REFERENCES users(id),
-        status      VARCHAR(50) NOT NULL DEFAULT 'pending',
-        sort_order  INTEGER     NOT NULL DEFAULT 0,
-        created_at  TIMESTAMPTZ DEFAULT NOW()
-      );
-    `);
-    // Idempotent migrations
-    try { await this._pool.query("ALTER TABLE organizations ADD COLUMN plan VARCHAR(20) NOT NULL DEFAULT 'free'"); } catch {}
-    try { await this._pool.query('ALTER TABLE tasks ADD COLUMN estimated_hours INTEGER NOT NULL DEFAULT 0'); } catch {}
-    await this._pool.query(`
-      CREATE TABLE IF NOT EXISTS plan_history (
-        id              SERIAL      PRIMARY KEY,
-        organization_id INTEGER     NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-        plan            VARCHAR(20) NOT NULL,
-        changed_by      INTEGER     REFERENCES users(id),
-        changed_at      TIMESTAMPTZ DEFAULT NOW()
-      );
-    `);
+    await MigrationRunner.run(this, 'pg');
     console.log('[DB] PostgreSQL schema ready.');
   }
 

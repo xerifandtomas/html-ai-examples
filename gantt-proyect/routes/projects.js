@@ -1,3 +1,4 @@
+// @ts-nocheck
 const express = require('express');
 const { getRepos } = require('../repositories');
 const { requireAuth, requireOrganization } = require('../middleware/auth');
@@ -6,6 +7,16 @@ const { checkLimit } = require('../middleware/tierLimits');
 const router = express.Router();
 router.use(requireAuth);
 router.use(requireOrganization);
+
+/** @param {any} req @param {{team_id: number}} project */
+async function canAccessProjectTeam(req, project) {
+  if (req.user.role === 'admin' || ['owner', 'admin'].includes(req.organization.role)) {
+    return true;
+  }
+
+  const { teams } = getRepos();
+  return teams.isUserMember(req.user.id, project.team_id);
+}
 
 // GET /api/projects
 router.get('/', async (req, res) => {
@@ -31,7 +42,7 @@ router.get('/', async (req, res) => {
     const all = results.flat().filter(p => { if (seen.has(p.id)) return false; seen.add(p.id); return true; });
     return res.json(all);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -59,7 +70,7 @@ router.post('/', checkLimit('projects'), async (req, res) => {
     });
     return res.status(201).json(project);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -70,53 +81,62 @@ router.get('/:id', async (req, res) => {
     const project = await projects.findById(req.params.id, req.organization.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    // Assuming if the project belongs to the org, the user can see it if they are in the org.
-    // Stricter check would verify if user is in project.team_id.
+    if (!(await canAccessProjectTeam(req, project))) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
     return res.json(project);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // PUT /api/projects/:id
 router.put('/:id', async (req, res) => {
   try {
-    const { projects } = getRepos();
+    const { projects, teams } = getRepos();
     const project = await projects.findById(req.params.id, req.organization.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    if (req.user.role !== 'admin' && req.organization.role === 'member') {
-        // Need to check if user is team_leader for project.team_id
-        // For simplicity, restrict to org owner or admin for now, or team_leader.
+    const isGlobalAdmin = req.user.role === 'admin';
+    const isOrgPrivileged = ['owner', 'admin'].includes(req.organization.role);
+    const isTeamLeader = req.organization.role === 'team_leader' && await teams.isUserTeamLeader(req.user.id, project.team_id);
+
+    if (!isGlobalAdmin && !isOrgPrivileged && !isTeamLeader) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    if (!(await canAccessProjectTeam(req, project))) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     const { name, description, start_date, end_date, status } = req.body;
     const updated = await projects.update(req.params.id, { name, description, start_date, end_date, status });
     return res.json(updated);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // DELETE /api/projects/:id
 router.delete('/:id', async (req, res) => {
-  if (!['admin', 'team_leader'].includes(req.user.role)) {
+  if (req.user.role !== 'admin' && !['owner', 'admin', 'team_leader'].includes(req.organization.role)) {
     return res.status(403).json({ error: 'Insufficient permissions' });
   }
 
   try {
     const { projects } = getRepos();
-    const project = await projects.findById(req.params.id);
+    const project = await projects.findById(req.params.id, req.organization.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    if (req.user.role !== 'admin' && project.team_id !== req.user.team_id) {
+    if (!(await canAccessProjectTeam(req, project))) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
     await projects.delete(req.params.id);
     return res.json({ message: 'Project deleted' });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -127,14 +147,14 @@ router.get('/:id/tasks', async (req, res) => {
     const project = await projects.findById(req.params.id, req.organization.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    if (req.user.role !== 'admin' && project.team_id !== req.user.team_id) {
+    if (!(await canAccessProjectTeam(req, project))) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
     const tasks = await projects.findTasksByProject(req.params.id);
     return res.json(tasks);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -145,10 +165,10 @@ router.post('/:id/tasks', checkLimit('tasks'), checkLimit('subtasks'), async (re
     const project = await projects.findById(req.params.id, req.organization.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    if (req.user.role !== 'admin' && project.team_id !== req.user.team_id) {
+    if (!(await canAccessProjectTeam(req, project))) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    if (req.user.role === 'member') {
+    if (req.user.role !== 'admin' && !['owner', 'admin', 'team_leader'].includes(req.organization.role)) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -169,7 +189,7 @@ router.post('/:id/tasks', checkLimit('tasks'), checkLimit('subtasks'), async (re
     });
     return res.status(201).json(task);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -177,18 +197,20 @@ router.post('/:id/tasks', checkLimit('tasks'), checkLimit('subtasks'), async (re
 router.put('/:id/tasks/:taskId', async (req, res) => {
   try {
     const { projects } = getRepos();
-    const project = await projects.findById(req.params.id);
+    const project = await projects.findById(req.params.id, req.organization.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    if (req.user.role !== 'admin' && project.team_id !== req.user.team_id) {
+    if (!(await canAccessProjectTeam(req, project))) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
     const task = await projects.findTaskById(req.params.taskId, req.params.id);
     if (!task) return res.status(404).json({ error: 'Task not found' });
 
-    // Members can only update progress on tasks assigned to them
-    if (req.user.role === 'member' && task.assigned_to !== req.user.id) {
+    const isPrivileged = req.user.role === 'admin' || ['owner', 'admin', 'team_leader'].includes(req.organization.role);
+
+    // Non-privileged members can only update tasks assigned to them
+    if (!isPrivileged && task.assigned_to !== req.user.id) {
       return res.status(403).json({ error: 'You can only update tasks assigned to you' });
     }
 
@@ -202,13 +224,13 @@ router.put('/:id/tasks/:taskId', async (req, res) => {
     });
     return res.json(updated);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // DELETE /api/projects/:id/tasks/:taskId
 router.delete('/:id/tasks/:taskId', async (req, res) => {
-  if (req.user.role === 'member') {
+  if (req.user.role !== 'admin' && !['owner', 'admin', 'team_leader'].includes(req.organization.role)) {
     return res.status(403).json({ error: 'Insufficient permissions' });
   }
 
@@ -220,7 +242,7 @@ router.delete('/:id/tasks/:taskId', async (req, res) => {
     await projects.deleteTask(req.params.taskId);
     return res.json({ message: 'Task deleted' });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

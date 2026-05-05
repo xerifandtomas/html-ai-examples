@@ -1,10 +1,20 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const { getRepos } = require('../repositories');
 const { requireAuth, requireOrganization } = require('../middleware/auth');
 const { checkLimit } = require('../middleware/tierLimits');
 const { getPlanLimitsJSON, UPGRADE_PATH, PLAN_LABELS } = require('../config/tiers');
 
 const router = express.Router();
+
+const invitationAcceptLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' }
+});
+
 router.use(requireAuth);
 
 // GET /api/organizations - List organizations for the authenticated user
@@ -14,7 +24,7 @@ router.get('/', async (req, res) => {
     const orgs = await organizations.findAllForUser(req.user.id);
     return res.json(orgs);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -29,12 +39,12 @@ router.post('/', async (req, res) => {
     const org = await organizations.findById(orgId);
     return res.status(201).json(org);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // GET /api/organizations/invitations/accept?token=...
-router.get('/invitations/accept', async (req, res) => {
+router.get('/invitations/accept', requireAuth, invitationAcceptLimiter, async (req, res) => {
   const { token } = req.query;
   if (!token) return res.status(400).json({ error: 'Invitation token is required' });
 
@@ -51,10 +61,14 @@ router.get('/invitations/accept', async (req, res) => {
 
     return res.json({ message: `Successfully joined organization ${invitation.organization_id}` });
   } catch (err) {
-    if (err.message.includes('UNIQUE constraint failed') || err.message.includes('PRIMARY KEY')) {
+    if (
+      err.message.includes('duplicate key') ||
+      err.message.includes('UNIQUE constraint failed') ||
+      err.message.includes('PRIMARY KEY')
+    ) {
       return res.status(409).json({ error: 'You are already a member of this organization' });
     }
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -72,7 +86,7 @@ router.get('/current', async (req, res) => {
     org.user_role = req.organization.role;
     return res.json(org);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -83,7 +97,7 @@ router.get('/current/members', async (req, res) => {
     const members = await organizations.findMembers(req.organization.id);
     return res.json(members);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -107,7 +121,7 @@ router.delete('/current/members/:userId', async (req, res) => {
     await organizations.removeMember(targetUserId, req.organization.id);
     return res.json({ message: 'Member removed from organization' });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -123,7 +137,7 @@ router.post('/current/invitations', checkLimit('invite_links'), async (req, res)
     const inviteLink = `${req.protocol}://${req.get('host')}/api/organizations/invitations/accept?token=${token}`;
     return res.json({ inviteLink, token });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -141,7 +155,7 @@ router.get('/current/plan', async (req, res) => {
       usage,
     });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

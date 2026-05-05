@@ -8,6 +8,23 @@ class ProjectRepository {
     this.db = adapter;
   }
 
+  _normalizeUserId(value) {
+    if (value == null) return null;
+    if (typeof value === 'object') {
+      value = value.id;
+    }
+    const id = Number(value);
+    return Number.isInteger(id) && id > 0 ? id : null;
+  }
+
+  _normalizeAssigneeIds(values) {
+    if (!Array.isArray(values)) return [];
+    const ids = values
+      .map(v => this._normalizeUserId(v))
+      .filter(v => v != null);
+    return [...new Set(ids)];
+  }
+
   // ─── Projects ────────────────────────────────────────────────────────────────
 
   _projectCols() {
@@ -94,7 +111,7 @@ class ProjectRepository {
   async findTasksByProject(projectId) {
     const tasks = await this.db.query(`
       SELECT t.*, u.username AS assigned_to_name, u.email AS assigned_to_email,
-        (SELECT GROUP_CONCAT(ta.user_id || ':' || au.username, '|')
+        (SELECT STRING_AGG(ta.user_id::text || ':' || au.username, '|')
          FROM task_assignees ta JOIN users au ON au.id = ta.user_id
          WHERE ta.task_id = t.id) AS _assignees_raw
       FROM tasks t
@@ -114,9 +131,12 @@ class ProjectRepository {
 
   async syncTaskAssignees(taskId, assigneeIds) {
     await this.db.execute('DELETE FROM task_assignees WHERE task_id = ?', [taskId]);
-    for (const uid of (assigneeIds || [])) {
-      if (uid) {
-        try { await this.db.execute('INSERT OR IGNORE INTO task_assignees (task_id, user_id) VALUES (?, ?)', [taskId, uid]); } catch {}
+    for (const uid of this._normalizeAssigneeIds(assigneeIds || [])) {
+      if (uid != null) {
+        await this.db.execute(
+          'INSERT INTO task_assignees (task_id, user_id) VALUES (?, ?) ON CONFLICT (task_id, user_id) DO NOTHING',
+          [taskId, uid]
+        );
       }
     }
   }
@@ -129,7 +149,10 @@ class ProjectRepository {
   }
 
   async createTask({ project_id, name, description, start_date, end_date, progress, color, parent_id, assigned_to, assignees, created_by, sort_order, estimated_hours }) {
-    const primaryAssignee = assignees?.length ? assignees[0] : (assigned_to ?? null);
+    const normalizedAssignees = this._normalizeAssigneeIds(assignees);
+    const primaryAssignee = normalizedAssignees.length
+      ? normalizedAssignees[0]
+      : this._normalizeUserId(assigned_to);
     const id = await this.db.insert(`
       INSERT INTO tasks
         (project_id, name, description, start_date, end_date, progress, color, parent_id, assigned_to, created_by, sort_order, estimated_hours)
@@ -143,7 +166,9 @@ class ProjectRepository {
       sort_order || 0,
       estimated_hours || 0
     ]);
-    const effectiveAssignees = assignees?.length ? assignees : (primaryAssignee ? [primaryAssignee] : []);
+    const effectiveAssignees = normalizedAssignees.length
+      ? normalizedAssignees
+      : (primaryAssignee != null ? [primaryAssignee] : []);
     await this.syncTaskAssignees(id, effectiveAssignees);
     const tasks = await this.findTasksByProject(project_id);
     return tasks.find(t => t.id === id) || null;
@@ -153,7 +178,10 @@ class ProjectRepository {
     // Normalize legacy status values
     const statusNorm = { pending: 'todo', completed: 'done' };
     const normStatus = status ? (statusNorm[status] || status) : null;
-    const primaryAssignee = assignees?.length ? assignees[0] : (assigned_to ?? null);
+    const normalizedAssignees = assignees === undefined ? undefined : this._normalizeAssigneeIds(assignees);
+    const primaryAssignee = normalizedAssignees && normalizedAssignees.length
+      ? normalizedAssignees[0]
+      : this._normalizeUserId(assigned_to);
     await this.db.execute(`
       UPDATE tasks SET
         name             = COALESCE(?, name),
@@ -183,7 +211,9 @@ class ProjectRepository {
       taskId
     ]);
     if (assignees !== undefined) {
-      const effectiveAssignees = assignees?.length ? assignees : (primaryAssignee ? [primaryAssignee] : []);
+      const effectiveAssignees = normalizedAssignees && normalizedAssignees.length
+        ? normalizedAssignees
+        : (primaryAssignee != null ? [primaryAssignee] : []);
       await this.syncTaskAssignees(taskId, effectiveAssignees);
     }
     const task = await this.db.queryOne('SELECT project_id FROM tasks WHERE id = ?', [taskId]);

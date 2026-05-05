@@ -1719,7 +1719,7 @@
   }
 
   function roleLabel(role) {
-    return { admin: 'Admin', team_leader: 'Líder', member: 'Miembro' }[role] || role;
+    return { owner: 'Propietario', admin: 'Admin', team_leader: 'Líder', member: 'Miembro' }[role] || role;
   }
 
   function setupUI() {
@@ -2525,7 +2525,9 @@
   });
 
   async function openTaskModal(taskId, projectId) {
-    const canEdit = ['admin','team_leader'].includes(currentUser.role);
+    const activeOrg = userOrgs.find(o => o.id === currentOrgId);
+    const orgRole = activeOrg ? activeOrg.user_role : 'member';
+    const canEdit = currentUser.role === 'admin' || ['owner', 'admin', 'team_leader'].includes(orgRole);
     document.getElementById('task-project-id').value = projectId;
 
     // Load team members if needed
@@ -2542,7 +2544,7 @@
 
       // Members can only edit tasks assigned to them
       const assignedIds = (task.assignees || []).map(a => a.id);
-      if (currentUser.role === 'member' && !assignedIds.includes(currentUser.id) && task.assigned_to !== currentUser.id) {
+      if (!canEdit && !assignedIds.includes(currentUser.id) && task.assigned_to !== currentUser.id) {
         toast('Solo puedes editar tareas asignadas a ti.', 'error');
         return;
       }
@@ -2587,7 +2589,7 @@
 
     // Disable fields for members editing non-assigned tasks
     const formInputs = document.querySelectorAll('#task-form input, #task-form select, #task-form textarea');
-    if (currentUser.role === 'member') {
+    if (!canEdit) {
       formInputs.forEach(el => {
         el.disabled = (el.id !== 'task-progress' && el.id !== 'task-status');
       });
@@ -2839,15 +2841,36 @@
   // ─────────────────────────────────────────────
   // PROFILE SECTION
   // ─────────────────────────────────────────────
-  function loadProfile() {
+  async function loadProfile() {
     const el = document.getElementById('profile-data');
     if (!currentUser) return;
+
+    if (!userOrgs.length) {
+      try {
+        userOrgs = await apiBase('/api/organizations');
+      } catch {}
+    }
+
+    const orgRows = userOrgs.length
+      ? `<div class="table-wrap" style="margin-top:1rem">
+          <table>
+            <thead><tr><th>Organización</th><th>Rol</th></tr></thead>
+            <tbody>${userOrgs.map(org => `<tr>
+              <td>${escHtml(org.name)}</td>
+              <td><span class="role-badge role-${org.user_role}">${roleLabel(org.user_role)}</span></td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>`
+      : '<p style="color:var(--text-secondary)">No perteneces a ninguna organización.</p>';
+
     el.innerHTML = `
       <p>Nombre: <strong>${escHtml(currentUser.username)}</strong></p>
       <p>Correo: <strong>${escHtml(currentUser.email)}</strong></p>
       <p>Rol: <span class="role-badge role-${currentUser.role}">${roleLabel(currentUser.role)}</span></p>
       <p>Miembro desde: <strong>${currentUser.created_at ? currentUser.created_at.slice(0,10) : '—'}</strong></p>
-      <hr style="border-color:var(--border); margin: 1rem 0">`;
+      <hr style="border-color:var(--border); margin: 1rem 0">
+      <p><strong>Roles por organización</strong></p>
+      ${orgRows}`;
   }
 
   // ─────────────────────────────────────────────

@@ -1,115 +1,41 @@
 version: '3.8'
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Gantt SaaS — Docker Compose
-#
-# Three mutually-exclusive profiles control which database backend is used.
-# Start the app with ONE of these commands:
-#
-#   SQLite (default, no extra services):
-#     docker compose up -d
-#
-#   MariaDB:
-#     docker compose --profile mariadb up -d
-#
-#   PostgreSQL:
-#     docker compose --profile postgres up -d
-#
-# IMPORTANT: Set JWT_SECRET to a strong random value before deploying.
-# Generate one with:
-#   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-# ─────────────────────────────────────────────────────────────────────────────
-
 services:
-  # ── Application (SQLite — default profile) ───────────────────────────────
   gantt:
     build: .
     ports:
       - "3000:3000"
-    volumes:
-      - gantt_data:/app/data
     environment:
       - NODE_ENV=production
-      - JWT_SECRET=change_this_secret_in_production
-      - DB_DRIVER=sqlite
-      - DATABASE_PATH=/app/data/gantt.db
+      - JWT_SECRET=${JWT_SECRET}
+      - DB_DRIVER=pg
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-dummy}
+      - DB_PASSWORD=${DB_PASSWORD:-dummy}
+      - DB_NAME=${DB_NAME:-dummy}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
-  # ── Application (MariaDB profile) ────────────────────────────────────────
-  # gantt-mariadb:
-  #   build: .
-  #   profiles: [mariadb]
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     - NODE_ENV=production
-  #     - JWT_SECRET=change_this_secret_in_production
-  #     - DB_DRIVER=mariadb
-  #     - DB_HOST=mariadb
-  #     - DB_PORT=3306
-  #     - DB_USER=gantt
-  #     - DB_PASSWORD=gantt_password
-  #     - DB_NAME=gantt
-  #   depends_on:
-  #     mariadb:
-  #       condition: service_healthy
-  #   restart: unless-stopped
-
-  # mariadb:
-  #   image: mariadb:11
-  #   profiles: [mariadb]
-  #   environment:
-  #     - MYSQL_ROOT_PASSWORD=root_password
-  #     - MYSQL_DATABASE=gantt
-  #     - MYSQL_USER=gantt
-  #     - MYSQL_PASSWORD=gantt_password
-  #   volumes:
-  #     - mariadb_data:/var/lib/mysql
-  #   healthcheck:
-  #     test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   restart: unless-stopped
-
-  # ── Application (PostgreSQL profile) ────────────────────────────────────
-  # gantt-postgres:
-  #   build: .
-  #   profiles: [postgres]
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     - NODE_ENV=production
-  #     - JWT_SECRET=change_this_secret_in_production
-  #     - DB_DRIVER=pg
-  #     - DB_HOST=postgres
-  #     - DB_PORT=5432
-  #     - DB_USER=gantt
-  #     - DB_PASSWORD=gantt_password
-  #     - DB_NAME=gantt
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   restart: unless-stopped
-
-  # postgres:
-  #   image: postgres:16-alpine
-  #   profiles: [postgres]
-  #   environment:
-  #     - POSTGRES_USER=gantt
-  #     - POSTGRES_PASSWORD=gantt_password
-  #     - POSTGRES_DB=gantt
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U gantt -d gantt"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   restart: unless-stopped
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME:-dummy}
+      POSTGRES_USER: ${DB_USER:-dummy}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dummy}
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-dummy} -d ${DB_NAME:-dummy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
 volumes:
-  gantt_data:
-  # mariadb_data:
-  # postgres_data:
-
+  dbdata:

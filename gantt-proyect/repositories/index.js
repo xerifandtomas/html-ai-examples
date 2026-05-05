@@ -1,15 +1,11 @@
 'use strict';
 
 /**
- * Factory that reads the DB_DRIVER environment variable and returns the
- * correct database adapter together with pre-wired repository instances.
+ * Factory that reads DB_DRIVER and returns the PostgreSQL adapter plus
+ * pre-wired repository instances.
  *
  * Supported drivers (case-insensitive):
- *   sqlite  — better-sqlite3  (default)
- *   mysql   — mysql2/promise
- *   mariadb — mysql2/promise  (alias for mysql)
- *   pg      — pg (PostgreSQL)
- *   postgres
+ *   pg, postgres, postgresql
  *
  * Usage:
  *   const { adapter, repos, initDatabase } = require('./repositories');
@@ -23,21 +19,14 @@ const ProjectRepository = require('./ProjectRepository');
 const OrganizationRepository = require('./OrganizationRepository');
 const SubscriptionRepository = require('./SubscriptionRepository');
 
+/** @type {import('./adapters/PgAdapter') | null} */
 let _adapter = null;
-let _repos   = null;
+
+/** @type {{users: UserRepository, teams: TeamRepository, projects: ProjectRepository, organizations: OrganizationRepository, subscriptions: SubscriptionRepository} | null} */
+let _repos = null;
 
 function createAdapter() {
-  const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
-
-  if (driver === 'sqlite') {
-    const SqliteAdapter = require('./adapters/SqliteAdapter');
-    return new SqliteAdapter();
-  }
-
-  if (driver === 'mysql' || driver === 'mariadb') {
-    const MysqlAdapter = require('./adapters/MysqlAdapter');
-    return new MysqlAdapter();
-  }
+  const driver = (process.env.DB_DRIVER || 'pg').toLowerCase();
 
   if (driver === 'pg' || driver === 'postgres' || driver === 'postgresql') {
     const PgAdapter = require('./adapters/PgAdapter');
@@ -45,7 +34,7 @@ function createAdapter() {
   }
 
   throw new Error(
-    `Unknown DB_DRIVER "${driver}". Supported values: sqlite, mysql, mariadb, pg, postgres.`
+    `Unsupported DB_DRIVER "${driver}". This application supports only PostgreSQL (pg/postgres/postgresql).`
   );
 }
 

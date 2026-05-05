@@ -29,7 +29,7 @@ router.get('/organizations', async (req, res) => {
     }));
     return res.json(result);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -54,7 +54,7 @@ router.put('/organizations/:id/plan', async (req, res) => {
       limits: getPlanLimitsJSON(plan),
     });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
