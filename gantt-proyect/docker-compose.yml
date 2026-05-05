@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  gantt:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET}
+      - DB_DRIVER=pg
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-dummy}
+      - DB_PASSWORD=${DB_PASSWORD:-dummy}
+      - DB_NAME=${DB_NAME:-dummy}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME:-dummy}
+      POSTGRES_USER: ${DB_USER:-dummy}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dummy}
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-dummy} -d ${DB_NAME:-dummy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  dbdata:
